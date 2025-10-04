@@ -1,0 +1,33 @@
+cat > .gitignore <<'EOF'
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.env
+
+# Docker
+*.pid
+*.sock
+.docker/
+update_snow.lock*
+update_snow.lockdir/
+
+# Local dev
+.vscode/
+.idea/
+logs/
+*.log
+
+# Django
+staticfiles/
+media/
+db.sqlite3
+
+# Byte-compiled / cache
+*.egg-info/
+.eggs/
+build/
+dist/
+EOF

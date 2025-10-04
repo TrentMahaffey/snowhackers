@@ -1,0 +1,95 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: snow
+      POSTGRES_USER: snowuser
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"              # <-- expose to host for DBeaver
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: snowapi-pipeline:latest         # or python:3.11-slim if you prefer
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql://snowuser:changeme@db:5432/snow
+      TIMEZONE: America/Denver
+      SNOTEL_STATES: CO,UT,WY,ID,MT,WA,OR,CA,NV,NM,AZ
+      MODELS: gfs,icon,ecmwf
+      FETCH_INTERVAL_SEC: 10800
+      FORECAST_DAYS_AHEAD: 14
+      AWDB_TIMEOUT_SEC: 45
+      AWDB_RETRIES: 3
+      AWDB_BACKOFF: 0.75
+      AWDB_CHUNK_SIZE: 20
+      VERBOSE: 0
+    volumes:
+      - ./:/app:delegated                  # bind mount your code
+    depends_on:
+      db:
+        condition: service_healthy
+    # You can override command per service/override .
+    command: ["sleep","infinity"]
+
+  stations:
+    extends:
+      service: runner
+    command: ["python","-m","snowapi","stations"]
+    profiles: ["adhoc"]
+
+  forecast_once:
+    extends:
+      service: runner
+    command: ["python","-m","snowapi","forecast-once","--days-ahead","14"]
+    profiles: ["adhoc"]
+
+  forecast_loop:
+    extends:
+      service: runner
+    command: ["python","-m","snowapi","forecast-loop","--interval","3600","--days-ahead","14"]
+    profiles: ["adhoc"]
+
+  init_views:
+    extends:
+      service: runner
+    command: ["python","-m","snowapi","init-views"]
+    profiles: ["adhoc"]
+
+
+  snowdash:
+    build:
+      context: ./snowdash
+      dockerfile: Dockerfile
+    image: snowdash:latest
+    container_name: snowapi-snowdash
+    env_file:
+      - .env
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-snow}
+      POSTGRES_USER: ${POSTGRES_USER:-snowuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./snowdash:/app:delegated    # ← live code sync from host to container
+    command: ["bash","-lc","python manage.py migrate && exec gunicorn snowdash.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60 --reload"]
+
+
+volumes:
+  pgdata:

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Snow Dashboard</title>
+  <style>
+    :root { --muted:#f5f5f5; --border:#e5e5e5; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 16px 0; }
+    .card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; background:#fff; }
+    a.button { display: inline-block; padding: 8px 12px; border: 1px solid #333; border-radius: 6px; text-decoration: none; }
+    section { margin-top: 32px; }
+    h1 { margin: 0 0 8px 0; }
+    h2 { margin: 24px 0 8px; }
+    h3 { margin: 16px 0 8px; }
+    table { border-collapse: collapse; margin: 8px 0 16px; width: 100%; }
+    th, td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+    th { background: var(--muted); }
+    .cols-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+    @media (max-width: 900px){ .cols-3 { grid-template-columns: 1fr; } }
+    .right { text-align: right; }
+  </style>
+</head>
+<body>
+  <h1>Snow Dashboard</h1>
+  <p>Live data from your SnowAPI Postgres.</p>
+
+  <div class="cards">
+    <div class="card"><strong>Stations</strong><div style="font-size:28px;">{{ counts.stations }}</div></div>
+    <div class="card"><strong>Hourly Obs</strong><div style="font-size:28px;">{{ counts.hourly_obs }}</div></div>
+    <div class="card"><strong>Forecast Rows</strong><div style="font-size:28px;">{{ counts.forecast_rows }}</div></div>
+  </div>
+<p><a class="button" href="{% url 'map' %}">View Map</a></p>
+
+
+  <section>
+    <h2>Top Forecasted Snow Totals (Across Models)</h2>
+    <div class="cols-3">
+      <div>
+        <h3>Next 24 Hours <small>({{ forecast_dates.h24 }})</small></h3>
+        <table>
+          <tr><th>Station</th><th class="right">Max (in)</th><th class="right">Avg (in)</th></tr>
+          {% for row in top_forecasts.h24 %}
+            <tr>
+              <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
+              <td class="right">{{ row.h24_max_in|default:0 }}</td>
+              <td class="right">{{ row.h24_avg_in|default:0 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">No forecast data</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+      <div>
+        <h3>Next 48 Hours <small>({{ forecast_dates.h48 }})</small></h3>
+        <table>
+          <tr><th>Station</th><th class="right">Max (in)</th><th class="right">Avg (in)</th></tr>
+          {% for row in top_forecasts.h48 %}
+            <tr>
+              <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
+              <td class="right">{{ row.h48_max_in|default:0 }}</td>
+              <td class="right">{{ row.h48_avg_in|default:0 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">No forecast data</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+      <div>
+        <h3>Next 72 Hours</h3>
+        <table>
+          <tr><th>Station</th><th class="right">Max (in)</th><th class="right">Avg (in)</th></tr>
+          {% for row in top_forecasts.h72 %}
+            <tr>
+              <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
+              <td class="right">{{ row.h72_max_in|default:0 }}</td>
+              <td class="right">{{ row.h72_avg_in|default:0 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3">No forecast data</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+  <h2>Observed Snow Totals (SNOTEL)</h2>
+  <div class="cols-3">
+    <!-- 24-hour window -->
+    <div>
+      <h3>Last 24 Hours</h3>
+      <table>
+        <tr>
+          <th>Station</th>
+          <th class="right">Obs (in)</th>
+          <th class="right">ECMWF (in)</th>
+          <th class="right">GFS (in)</th>
+          <th class="right">ICON (in)</th>
+        </tr>
+        {% for row in recent_totals.h24 %}
+          <tr>
+            <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
+            <td class="right">{{ row.obs_in|floatformat:1 }}</td>
+            <td class="right">{{ row.ecmwf_in|floatformat:1 }}</td>
+            <td class="right">{{ row.gfs_in|floatformat:1 }}</td>
+            <td class="right">{{ row.icon_in|floatformat:1 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No observed data</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <!-- 48-hour window -->
+    <div>
+      <h3>Last 48 Hours</h3>
+      <table>
+        <tr>
+          <th>Station</th>
+          <th class="right">Obs (in)</th>
+          <th class="right">ECMWF (in)</th>
+          <th class="right">GFS (in)</th>
+          <th class="right">ICON (in)</th>
+        </tr>
+        {% for row in recent_totals.h48 %}
+          <tr>
+            <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
+            <td class="right">{{ row.obs_in|floatformat:1 }}</td>
+            <td class="right">{{ row.ecmwf_in|floatformat:1 }}</td>
+            <td class="right">{{ row.gfs_in|floatformat:1 }}</td>
+            <td class="right">{{ row.icon_in|floatformat:1 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No observed data</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <!-- 72-hour window -->
+    <div>
+      <h3>Last 72 Hours</h3>
+      <table>
+        <tr>
+          <th>Station</th>
+          <th class="right">Obs (in)</th>
+          <th class="right">ECMWF (in)</th>
+          <th class="right">GFS (in)</th>
+          <th class="right">ICON (in)</th>
+        </tr>
+        {% for row in recent_totals.h72 %}
+          <tr>
+            <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
+            <td class="right">{{ row.obs_in|floatformat:1 }}</td>
+            <td class="right">{{ row.ecmwf_in|floatformat:1 }}</td>
+            <td class="right">{{ row.gfs_in|floatformat:1 }}</td>
+            <td class="right">{{ row.icon_in|floatformat:1 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No observed data</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</section>
+</body>
+</html>
