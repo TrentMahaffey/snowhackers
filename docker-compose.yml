@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16
@@ -5,8 +7,6 @@ services:
       POSTGRES_DB: snow
       POSTGRES_USER: snowuser
       POSTGRES_PASSWORD: changeme
-    ports:
-      - "5432:5432"              # <-- expose to host for DBeaver
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d
@@ -15,12 +15,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    networks:
+      - default
 
+  # Base image for running CLI / batch tasks
   runner:
     build:
       context: .
       dockerfile: Dockerfile
-    image: snowapi-pipeline:latest         # or python:3.11-slim if you prefer
+    image: snowapi-pipeline:latest
     working_dir: /app
     environment:
       DATABASE_URL: postgresql://snowuser:changeme@db:5432/snow
@@ -35,38 +39,49 @@ services:
       AWDB_CHUNK_SIZE: 20
       VERBOSE: 0
     volumes:
-      - ./:/app:delegated                  # bind mount your code
+      - ./:/app:delegated
     depends_on:
       db:
         condition: service_healthy
-    # You can override command per service/override .
     command: ["sleep","infinity"]
+    restart: unless-stopped
+    networks:
+      - default
 
+  # Ad-hoc commands extend from runner (use with profiles)
   stations:
     extends:
       service: runner
     command: ["python","-m","snowapi","stations"]
     profiles: ["adhoc"]
+    networks:
+      - default
 
   forecast_once:
     extends:
       service: runner
     command: ["python","-m","snowapi","forecast-once","--days-ahead","14"]
     profiles: ["adhoc"]
+    networks:
+      - default
 
   forecast_loop:
     extends:
       service: runner
     command: ["python","-m","snowapi","forecast-loop","--interval","3600","--days-ahead","14"]
     profiles: ["adhoc"]
+    networks:
+      - default
 
   init_views:
     extends:
       service: runner
     command: ["python","-m","snowapi","init-views"]
     profiles: ["adhoc"]
+    networks:
+      - default
 
-
+  # Django site (Gunicorn) on host port 9003
   snowdash:
     build:
       context: ./snowdash
@@ -83,13 +98,33 @@ services:
       POSTGRES_HOST: ${POSTGRES_HOST:-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
-      - "8000:8000"
+      - "9003:8000"   # host:container
     volumes:
-      - ./snowdash:/app:delegated    # ← live code sync from host to container
-    command: ["bash","-lc","python manage.py migrate && exec gunicorn snowdash.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60 --reload"]
-
+      - ./snowdash:/app:delegated
+    command:
+      - bash
+      - -lc
+      - |
+        python manage.py migrate &&
+        exec gunicorn snowdash.wsgi:application \
+          --bind 0.0.0.0:8000 \
+          --workers 2 \
+          --timeout 60 \
+          --reload
+    restart: unless-stopped
+    networks:
+      - webnet     # to be reachable by your portfolio/nginx stack
+      - default
 
 volumes:
   pgdata:
+
+networks:
+  # Must already exist (created by your portfolio stack).
+  # Check with: `docker network ls | grep webnet`
+  webnet:
+    external: true
+    name: webnet
