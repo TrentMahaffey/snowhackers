@@ -4,7 +4,7 @@ IFS=$'\n\t'
 
 # --- choose docker compose command dynamically ---
 if [[ -n "${COMPOSE:-}" ]]; then
-  : # respect user-provided COMPOSE
+  : # respect user-provided COMPOSE (can be a string like "docker compose" or "docker-compose")
 elif docker compose version >/dev/null 2>&1; then
   COMPOSE=("docker" "compose")
 elif command -v docker-compose >/dev/null 2>&1; then
@@ -29,11 +29,11 @@ mkdir -p "$LOG_DIR"
 TS() { date +"%Y-%m-%dT%H:%M:%S%z"; }
 LOG_FILE="${LOG_DIR}/update_$(date +%Y%m%d_%H%M%S).log"
 
-# acquire lock
+# acquire lock (directory lock works on macOS + Linux, no flock dependency)
 if mkdir "$LOCK_DIR" 2>/dev/null; then
   trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 else
-  echo "[$(TS)] another update is running, exiting"
+  echo "[$(TS)] another update is running, exiting" | tee -a "$LOG_FILE"
   exit 0
 fi
 
@@ -44,9 +44,10 @@ run() {
   "$@" 2>&1 | tee -a "$LOG_FILE"
 }
 
-# pipeline
+# --- pipeline ---
+# NOTE: removed '-v' (main.py doesn't support it)
 run "${COMPOSE[@]}" run --rm -T runner \
-  python -u /app/main.py -v update-all \
+  python -u /app/main.py update-all \
   --days-back "$DAYS_BACK" \
   --models "$MODELS" \
   --states "$STATES" \
