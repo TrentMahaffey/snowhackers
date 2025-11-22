@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Colorado Snow Cams</title>
+  <style>
+    :root {
+      --primary: #2c7ae0;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #e5e5e5;
+      --text: #1a1a1a;
+      --text-muted: #666;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      color: var(--primary);
+    }
+    .header p {
+      margin: 4px 0 0 0;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .nav-links {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .nav-link {
+      display: inline-block;
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .nav-link:hover {
+      background: #1f5fb3;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .filter-bar {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+    .filter-bar input {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .resort-section {
+      margin-bottom: 32px;
+    }
+    .resort-header {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary);
+    }
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .video-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: all 0.2s;
+    }
+    .video-card:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      transform: translateY(-2px);
+    }
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%; /* 16:9 aspect ratio */
+      background: #000;
+    }
+    .video-wrapper video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .video-info {
+      padding: 12px;
+    }
+    .video-date {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+    }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    @media (max-width: 768px) {
+      .header h1 { font-size: 20px; }
+      .video-grid { grid-template-columns: 1fr; }
+      .resort-header { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Colorado Snow Cams</h1>
+    <p>Daily timelapses from 19 resorts</p>
+    <div class="nav-links">
+      <a href="/" class="nav-link">Map</a>
+      <a href="/tables/" class="nav-link">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="filter-bar">
+      <input type="text" id="search" placeholder="Search resorts..." />
+    </div>
+
+    <div id="content" class="loading">
+      Loading snow cam videos...
+    </div>
+  </div>
+
+  <script>
+    let allVideos = [];
+
+    // Fetch videos from API
+    async function loadVideos() {
+      try {
+        const response = await fetch('/api/snowcam_videos');
+        allVideos = await response.json();
+        renderVideos(allVideos);
+      } catch (error) {
+        document.getElementById('content').innerHTML = `
+          <div class="empty-state">
+            <h2>Error Loading Videos</h2>
+            <p>${error.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    // Render videos grouped by resort
+    function renderVideos(videos) {
+      const content = document.getElementById('content');
+
+      if (videos.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state">
+            <h2>No Videos Available</h2>
+            <p>Check back later for new timelapses</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Group by resort
+      const byResort = {};
+      videos.forEach(video => {
+        if (!byResort[video.resort]) {
+          byResort[video.resort] = [];
+        }
+        byResort[video.resort].push(video);
+      });
+
+      // Render sections
+      let html = '';
+      const resorts = Object.keys(byResort).sort();
+
+      resorts.forEach(resort => {
+        const resortVideos = byResort[resort];
+        html += `
+          <div class="resort-section" data-resort="${resort.toLowerCase()}">
+            <div class="resort-header">${resort}</div>
+            <div class="video-grid">
+              ${resortVideos.map(video => `
+                <div class="video-card">
+                  <div class="video-wrapper">
+                    <video controls preload="metadata" playsinline>
+                      <source src="${video.url}" type="video/mp4">
+                      Your browser doesn't support video playback.
+                    </video>
+                  </div>
+                  <div class="video-info">
+                    <div class="video-date">${video.date}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      });
+
+      content.innerHTML = html;
+    }
+
+    // Search filter
+    document.getElementById('search').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      const sections = document.querySelectorAll('.resort-section');
+
+      sections.forEach(section => {
+        const resortName = section.dataset.resort;
+        if (resortName.includes(query)) {
+          section.style.display = 'block';
+        } else {
+          section.style.display = 'none';
+        }
+      });
+    });
+
+    // Load videos on page load
+    loadVideos();
+  </script>
+</body>
+</html>

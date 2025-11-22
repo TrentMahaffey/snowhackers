@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Heat Map Test</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin:0; font-family: sans-serif; }
+    #map { height: 100vh; }
+    #info { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; z-index: 1000; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <strong>Heat Map Test</strong><br>
+    <span id="status">Loading...</span>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+
+    // Create map
+    const map = L.map('map').setView([40.5, -111.5], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 15,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    statusEl.textContent = 'Fetching regional data...';
+
+    // Fetch regional data
+    fetch('/api/regional_forecast?h=72&metric=avg_in')
+      .then(res => res.json())
+      .then(data => {
+        statusEl.textContent = `Loaded ${data.length} regions`;
+
+        // Create heat map data
+        const heatData = data.map(r => {
+          const val = Number(r.avg_in || 0);
+          const intensity = Math.min(val / 8, 1.0);
+          return [r.lat, r.lon, intensity];
+        });
+
+        console.log('Heat data:', heatData);
+
+        // Add heat layer
+        const heatLayer = L.heatLayer(heatData, {
+          radius: 120,
+          blur: 150,
+          max: 0.5,
+          minOpacity: 0.5,
+          gradient: {
+            0.0: '#eaf7ff',
+            0.15: '#cfe9ff',
+            0.3: '#a9d1ff',
+            0.45: '#7fb6ff',
+            0.6: '#5199ff',
+            0.75: '#2c7ae0',
+            0.9: '#1f5fb3',
+            1.0: '#0d3f7a'
+          }
+        }).addTo(map);
+
+        statusEl.textContent = `Heat map rendered with ${heatData.length} points`;
+
+        // Add markers for reference
+        data.forEach(r => {
+          if (r.avg_in > 0) {
+            L.circleMarker([r.lat, r.lon], {radius: 3, color: 'red'})
+              .bindPopup(`${r.region}<br>${r.avg_in}"`)
+              .addTo(map);
+          }
+        });
+      })
+      .catch(err => {
+        statusEl.textContent = 'Error: ' + err.message;
+        console.error(err);
+      });
+  </script>
+</body>
+</html>

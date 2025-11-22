@@ -1,5 +1,8 @@
 from django.db import connection
 from django.shortcuts import render
+from django.core.cache import cache
+from django.views.decorators.cache import cache_page
+from django.conf import settings
 
 def _fetchall_dict(cur):
     if cur.description is None:
@@ -97,86 +100,50 @@ LIMIT 10;
 import math
 
 def _observed_with_model_forecasts(hours_back: int):
+    # Check cache first
+    cache_key = f"obs_vs_fc_{hours_back}h"
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        return cached_result
+
+    # If not cached, run the query
     days_back = int(math.ceil(hours_back / 24))
     with connection.cursor() as cur:
         cur.execute(_OBS_VS_FC_SQL, [hours_back, days_back])
-        return _fetchall_dict(cur)
+        result = _fetchall_dict(cur)
+
+    # Cache for 5 minutes (data updates every 3 hours)
+    cache.set(cache_key, result, getattr(settings, 'QUERY_CACHE_TIMEOUT', 300))
+    return result
 
 
 
 def index(request):
-    with connection.cursor() as cur:
-        # --- counts ---
-        cur.execute("SELECT COUNT(*) AS stations FROM public.snotel_station;")
-        stations = _fetchall_dict(cur)[0]["stations"]
+    # Cache counts separately (changes infrequently)
+    counts = cache.get("dashboard_counts")
+    if counts is None:
+        with connection.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS stations FROM public.snotel_station;")
+            stations = _fetchall_dict(cur)[0]["stations"]
 
-        cur.execute("SELECT COUNT(*) AS hourly_obs FROM public.snotel_hourly_obs;")
-        hourly_obs = _fetchall_dict(cur)[0]["hourly_obs"]
+            cur.execute("SELECT COUNT(*) AS hourly_obs FROM public.snotel_hourly_obs;")
+            hourly_obs = _fetchall_dict(cur)[0]["hourly_obs"]
 
-        cur.execute("SELECT COUNT(*) AS forecast_rows FROM public.forecast_hourly;")
-        forecast_rows = _fetchall_dict(cur)[0]["forecast_rows"]
+            cur.execute("SELECT COUNT(*) AS forecast_rows FROM public.forecast_hourly;")
+            forecast_rows = _fetchall_dict(cur)[0]["forecast_rows"]
 
-        counts = {"stations": stations, "hourly_obs": hourly_obs, "forecast_rows": forecast_rows}
+            counts = {"stations": stations, "hourly_obs": hourly_obs, "forecast_rows": forecast_rows}
+        cache.set("dashboard_counts", counts, 300)  # Cache for 5 minutes
 
-        # --- combined forecast rollup: per-station MAX & AVG across models for 24/48/72 ---
-        cur.execute("""
-        WITH latest AS (
-          SELECT f.*,
-                 ROW_NUMBER() OVER (
-                   PARTITION BY
-                     COALESCE(f.station_triplet, CONCAT(f.latitude, ',', f.longitude)),
-                     f.model_name,
-                     f.ts_valid
-                   ORDER BY f.ts_forecast DESC
-                 ) AS rn
-          FROM public.forecast_hourly f
-          WHERE f.ts_valid > now()
-            AND f.ts_valid <= now() + interval '72 hours'
-        ),
-        per_model AS (
-          SELECT
-            COALESCE(f.station_triplet, CONCAT(f.latitude, ',', f.longitude)) AS st_key,
-            f.station_triplet,
-            f.model_name,
-            -- sum within window per model
-            SUM(CASE WHEN f.ts_valid <= now() + interval '24 hours' THEN COALESCE(f.snowfall_cm,0) ELSE 0 END)::numeric AS h24_cm,
-            SUM(CASE WHEN f.ts_valid <= now() + interval '48 hours' THEN COALESCE(f.snowfall_cm,0) ELSE 0 END)::numeric AS h48_cm,
-            SUM(CASE WHEN f.ts_valid <= now() + interval '72 hours' THEN COALESCE(f.snowfall_cm,0) ELSE 0 END)::numeric AS h72_cm
-          FROM latest f
-          WHERE f.rn = 1
-          GROUP BY COALESCE(f.station_triplet, CONCAT(f.latitude, ',', f.longitude)),
-                   f.station_triplet,
-                   f.model_name
-        ),
-        by_station AS (
-          SELECT
-            p.st_key,
-            MAX(p.station_triplet) FILTER (WHERE p.station_triplet IS NOT NULL) AS station_triplet,
-            MAX(p.h24_cm) AS h24_cm_max,
-            AVG(p.h24_cm) AS h24_cm_avg,
-            MAX(p.h48_cm) AS h48_cm_max,
-            AVG(p.h48_cm) AS h48_cm_avg,
-            MAX(p.h72_cm) AS h72_cm_max,
-            AVG(p.h72_cm) AS h72_cm_avg
-          FROM per_model p
-          GROUP BY p.st_key
-        )
-        SELECT
-          COALESCE(s.name, b.st_key) AS station_name,
-          COALESCE(b.station_triplet, b.st_key) AS station_triplet,
-          -- convert to inches in SQL; ensure numeric then round
-          ROUND((COALESCE(b.h24_cm_max,0) / 2.54)::numeric, 1) AS h24_max_in,
-          ROUND((COALESCE(b.h24_cm_avg,0) / 2.54)::numeric, 1) AS h24_avg_in,
-          ROUND((COALESCE(b.h48_cm_max,0) / 2.54)::numeric, 1) AS h48_max_in,
-          ROUND((COALESCE(b.h48_cm_avg,0) / 2.54)::numeric, 1) AS h48_avg_in,
-          ROUND((COALESCE(b.h72_cm_max,0) / 2.54)::numeric, 1) AS h72_max_in,
-          ROUND((COALESCE(b.h72_cm_avg,0) / 2.54)::numeric, 1) AS h72_avg_in
-        FROM by_station b
-        LEFT JOIN public.snotel_station s ON s.station_triplet = b.station_triplet
-        """)
-        rows = _fetchall_dict(cur)
+    # Cache forecast rollup
+    top_forecasts = cache.get("top_forecasts")
+    if top_forecasts is None:
+        with connection.cursor() as cur:
+            # Query pre-computed materialized view (instant!)
+            cur.execute("SELECT * FROM mv_forecast_rollup;")
+            rows = _fetchall_dict(cur)
 
-    # leaderboards: sort by MAX for each interval and take top 10
+        # leaderboards: sort by MAX for each interval and take top 10
         def topn(rows, key, n=10):
             return sorted(rows, key=lambda r: (r.get(key) or 0), reverse=True)[:n]
 
@@ -197,9 +164,14 @@ def index(request):
                 for r in topn(rows, "h72_max_in")
             ],
         }
+        cache.set("top_forecasts", top_forecasts, 300)  # Cache for 5 minutes
 
-        # --- observed totals (SNOTEL) — top 10 for 24/48/72 using daily accums view ---
-        cur.execute("""
+    # Cache observed totals separately
+    obs_rows_cached = cache.get("obs_rows")
+    if obs_rows_cached is None:
+        with connection.cursor() as cur:
+            # --- observed totals (SNOTEL) — top 10 for 24/48/72 using daily accums view ---
+            cur.execute("""
                 WITH recent AS (
                   SELECT a.station_triplet, a.date, a.new_snow_cm
                   FROM public.snotel_daily_accums_cm a
@@ -223,18 +195,30 @@ def index(request):
                 FROM agg a
                 LEFT JOIN public.snotel_station s ON s.station_triplet = a.station_triplet
             """)
-        obs_rows = _fetchall_dict(cur)
+            obs_rows_cached = _fetchall_dict(cur)
+        cache.set("obs_rows", obs_rows_cached, 300)  # Cache for 5 minutes
 
+    # Use cached observed data (not currently used in template, but keep for reference)
+    # obs_rows = obs_rows_cached
 
-        # leaderboards for observed: top 10 by each interval
-        def topn(rows, key, n=10):
-            return sorted(rows, key=lambda r: (r.get(key) or 0), reverse=True)[:n]
+    # Query from pre-computed materialized views (instant!)
+    def get_obs_vs_fc(hours):
+        cache_key = f"obs_vs_fc_{hours}h"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
 
-        recent_totals = {
-            "h24": _observed_with_model_forecasts(24),
-            "h48": _observed_with_model_forecasts(48),
-            "h72": _observed_with_model_forecasts(72),
-        }
+        with connection.cursor() as cur:
+            cur.execute(f"SELECT * FROM mv_obs_vs_fc_{hours}h;")
+            result = _fetchall_dict(cur)
+        cache.set(cache_key, result, 300)
+        return result
+
+    recent_totals = {
+        "h24": get_obs_vs_fc(24),
+        "h48": get_obs_vs_fc(48),
+        "h72": get_obs_vs_fc(72),
+    }
 
     from datetime import datetime, timedelta
 
@@ -255,6 +239,10 @@ def index(request):
 
 def map_view(request):
     return render(request, "dashboard/map.html")
+
+
+def heatmap_test(request):
+    return render(request, "dashboard/heatmap_test.html")
 
 
 
@@ -285,53 +273,369 @@ def api_forecast_stations(request):
     except ValueError:
         hours = 72
 
-    sql = """
-    WITH latest AS (
-      SELECT f.*,
-             ROW_NUMBER() OVER (
-               PARTITION BY COALESCE(f.station_triplet, CONCAT(f.latitude, ',', f.longitude)),
-                            f.model_name,
-                            f.ts_valid
-               ORDER BY f.ts_forecast DESC
-             ) AS rn
-      FROM public.forecast_hourly f
-      WHERE f.ts_valid > now()
-        AND f.ts_valid <= now() + make_interval(hours => %s)
-    ),
-    per_model AS (
-      SELECT
-        COALESCE(f.station_triplet, CONCAT(f.latitude, ',', f.longitude)) AS st_key,
-        f.station_triplet,
-        f.model_name,
-        SUM(CASE WHEN f.rn = 1 THEN COALESCE(f.snowfall_cm,0) ELSE 0 END)::numeric AS total_cm
-      FROM latest f
-      GROUP BY COALESCE(f.station_triplet, CONCAT(f.latitude, ',', f.longitude)),
-               f.station_triplet,
-               f.model_name
-    ),
-    by_station AS (
-      SELECT
-        p.st_key,
-        MAX(p.station_triplet) FILTER (WHERE p.station_triplet IS NOT NULL) AS station_triplet,
-        AVG(p.total_cm) AS cm_avg,
-        MAX(p.total_cm) AS cm_max
-      FROM per_model p
-      GROUP BY p.st_key
-    )
+    # Check cache first
+    cache_key = f"api_forecast_stations_{hours}h"
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        return JsonResponse(cached_result, safe=False)
+
+    # Select appropriate columns from materialized view based on hours
+    if hours == 24:
+        max_col, avg_col = "h24_max_in", "h24_avg_in"
+    elif hours == 48:
+        max_col, avg_col = "h48_max_in", "h48_avg_in"
+    else:  # 72
+        max_col, avg_col = "h72_max_in", "h72_avg_in"
+
+    sql = f"""
     SELECT
-      COALESCE(s.station_triplet, b.st_key) AS station_triplet,
-      COALESCE(s.name, b.st_key)            AS station_name,
-      s.latitude                             AS lat,
-      s.longitude                            AS lon,
-      ROUND((COALESCE(b.cm_avg,0) / 2.54)::numeric, 1) AS avg_in,
-      ROUND((COALESCE(b.cm_max,0) / 2.54)::numeric, 1) AS max_in
-    FROM by_station b
-    LEFT JOIN public.snotel_station s ON s.station_triplet = b.station_triplet
-    WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL
+      station_triplet,
+      station_name,
+      latitude AS lat,
+      longitude AS lon,
+      {avg_col} AS avg_in,
+      {max_col} AS max_in
+    FROM mv_forecast_rollup
+    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
     """
     with connection.cursor() as cur:
-        cur.execute(sql, [hours])
+        cur.execute(sql)
         cols = [c[0] for c in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
 
+    # Cache the result for 5 minutes
+    cache.set(cache_key, rows, getattr(settings, 'QUERY_CACHE_TIMEOUT', 300))
+
     return JsonResponse(rows, safe=False)
+
+
+def api_observed_stations(request):
+    """
+    Returns observed snow totals from SNOTEL stations for the past N days.
+    Query param: days (default 3, max 7)
+    """
+    days_str = request.GET.get("days", "3")
+    try:
+        days = int(days_str)
+        if days < 1 or days > 7:
+            days = 3
+    except ValueError:
+        days = 3
+
+    # Check cache
+    cache_key = f"api_observed_stations_{days}d"
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        return JsonResponse(cached_result, safe=False)
+
+    sql = """
+    WITH recent AS (
+      SELECT a.station_triplet, a.date, a.new_snow_cm
+      FROM snotel_daily_accums_cm a
+      WHERE a.date >= CURRENT_DATE - make_interval(days => %s)
+    ),
+    totals AS (
+      SELECT
+        r.station_triplet,
+        SUM(COALESCE(r.new_snow_cm, 0))::numeric AS total_cm
+      FROM recent r
+      GROUP BY r.station_triplet
+    )
+    SELECT
+      s.station_triplet,
+      s.name AS station_name,
+      s.latitude AS lat,
+      s.longitude AS lon,
+      ROUND((COALESCE(t.total_cm, 0) / 2.54)::numeric, 1) AS total_in
+    FROM snotel_station s
+    LEFT JOIN totals t ON t.station_triplet = s.station_triplet
+    WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL
+    """
+    with connection.cursor() as cur:
+        cur.execute(sql, [days])
+        cols = [c[0] for c in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    # Cache for 5 minutes
+    cache.set(cache_key, rows, getattr(settings, 'QUERY_CACHE_TIMEOUT', 300))
+
+    return JsonResponse(rows, safe=False)
+
+
+def api_regional_forecast(request):
+    """
+    Returns snow forecasts aggregated by geographic region.
+    Groups stations into mountain ranges/regions and returns average snow per region.
+    """
+    hours_str = request.GET.get("h", "72")
+    try:
+        hours = int(hours_str)
+        if hours not in (24, 48, 72):
+            hours = 72
+    except ValueError:
+        hours = 72
+
+    # Define regions by lat/lon boundaries
+    regions = {
+        "Cascades (WA)": {"lat_min": 47.0, "lat_max": 49.0, "lon_min": -122.0, "lon_max": -120.0},
+        "Cascades (OR)": {"lat_min": 43.5, "lat_max": 46.5, "lon_min": -122.5, "lon_max": -121.0},
+        "North Sierra": {"lat_min": 39.0, "lat_max": 40.5, "lon_min": -121.0, "lon_max": -119.5},
+        "Central Sierra": {"lat_min": 37.5, "lat_max": 39.0, "lon_min": -120.0, "lon_max": -118.5},
+        "South Sierra": {"lat_min": 35.5, "lat_max": 37.5, "lon_min": -119.5, "lon_max": -117.5},
+        "Northern Rockies (MT)": {"lat_min": 46.0, "lat_max": 49.0, "lon_min": -115.0, "lon_max": -110.0},
+        "Wyoming Ranges": {"lat_min": 42.5, "lat_max": 45.0, "lon_min": -111.0, "lon_max": -108.0},
+        "Tetons/Wind River": {"lat_min": 42.5, "lat_max": 44.5, "lon_min": -111.0, "lon_max": -109.0},
+        "Wasatch (UT)": {"lat_min": 40.0, "lat_max": 41.5, "lon_min": -112.5, "lon_max": -111.0},
+        "Uintas (UT)": {"lat_min": 40.5, "lat_max": 41.0, "lon_min": -111.0, "lon_max": -109.5},
+        "San Juans (CO)": {"lat_min": 37.0, "lat_max": 38.5, "lon_min": -108.5, "lon_max": -106.5},
+        "Central CO": {"lat_min": 38.5, "lat_max": 40.0, "lon_min": -107.0, "lon_max": -105.5},
+        "Front Range (CO)": {"lat_min": 39.0, "lat_max": 41.0, "lon_min": -106.0, "lon_max": -105.0},
+        "North CO": {"lat_min": 40.0, "lat_max": 41.5, "lon_min": -107.0, "lon_max": -105.5},
+        "Southern CO": {"lat_min": 36.5, "lat_max": 37.5, "lon_min": -107.0, "lon_max": -105.0},
+        "Northern NM": {"lat_min": 35.5, "lat_max": 37.0, "lon_min": -107.5, "lon_max": -105.0},
+        "Arizona": {"lat_min": 33.5, "lat_max": 36.5, "lon_min": -112.0, "lon_max": -109.0},
+        "Idaho": {"lat_min": 43.0, "lat_max": 45.5, "lon_min": -116.0, "lon_max": -111.5},
+    }
+
+    metric = request.GET.get("metric", "avg_in")
+
+    # Check cache
+    cache_key = f"api_regional_forecast_{hours}h_{metric}"
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        return JsonResponse(cached_result, safe=False)
+
+    # Get station data from materialized view
+    if hours == 24:
+        max_col, avg_col = "h24_max_in", "h24_avg_in"
+    elif hours == 48:
+        max_col, avg_col = "h48_max_in", "h48_avg_in"
+    else:
+        max_col, avg_col = "h72_max_in", "h72_avg_in"
+
+    sql = f"""
+    SELECT
+      station_triplet,
+      station_name,
+      latitude,
+      longitude,
+      {avg_col} AS avg_in,
+      {max_col} AS max_in
+    FROM mv_forecast_rollup
+    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+    """
+
+    with connection.cursor() as cur:
+        cur.execute(sql)
+        cols = [c[0] for c in cur.description]
+        stations = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    # Group stations by region and return all station points tagged with region name
+    regional_data = []
+    for region_name, bounds in regions.items():
+        region_stations = [
+            s for s in stations
+            if (bounds["lat_min"] <= s["latitude"] <= bounds["lat_max"] and
+                bounds["lon_min"] <= s["longitude"] <= bounds["lon_max"])
+        ]
+
+        if region_stations:
+            avg_snow = sum(s[metric] for s in region_stations) / len(region_stations)
+            # Calculate center point of region for label
+            center_lat = (bounds["lat_min"] + bounds["lat_max"]) / 2
+            center_lon = (bounds["lon_min"] + bounds["lon_max"]) / 2
+
+            # Return all individual station points within this region
+            for station in region_stations:
+                regional_data.append({
+                    "region": region_name,
+                    "lat": station["latitude"],
+                    "lon": station["longitude"],
+                    "avg_in": station["avg_in"],
+                    "max_in": station["max_in"],
+                    "station_name": station["station_name"],
+                    "is_label": False
+                })
+
+            # Add a label point at region center
+            regional_data.append({
+                "region": region_name,
+                "lat": center_lat,
+                "lon": center_lon,
+                "avg_in": round(avg_snow, 1),
+                "station_count": len(region_stations),
+                "is_label": True  # Mark this as a label point
+            })
+
+    # Cache for 5 minutes
+    cache.set(cache_key, regional_data, 300)
+
+    return JsonResponse(regional_data, safe=False)
+
+
+@cache_page(300)
+def api_regional_observed(request):
+    """
+    Returns observed snow totals aggregated by geographic region.
+    """
+    days_str = request.GET.get("days", "3")
+    try:
+        days = int(days_str)
+        if days not in (1, 2, 3, 5, 7):
+            days = 3
+    except ValueError:
+        days = 3
+
+    # Same regional boundaries as forecast
+    regions = {
+        "Cascades (WA)": {"lat_min": 47.0, "lat_max": 49.0, "lon_min": -122.0, "lon_max": -120.0},
+        "Cascades (OR)": {"lat_min": 43.5, "lat_max": 46.5, "lon_min": -122.5, "lon_max": -121.0},
+        "North Sierra": {"lat_min": 39.0, "lat_max": 40.5, "lon_min": -121.0, "lon_max": -119.5},
+        "Central Sierra": {"lat_min": 37.5, "lat_max": 39.0, "lon_min": -120.0, "lon_max": -118.5},
+        "South Sierra": {"lat_min": 35.5, "lat_max": 37.5, "lon_min": -119.5, "lon_max": -117.5},
+        "Northern Rockies (MT)": {"lat_min": 46.0, "lat_max": 49.0, "lon_min": -115.0, "lon_max": -110.0},
+        "Wyoming Ranges": {"lat_min": 42.5, "lat_max": 45.0, "lon_min": -111.0, "lon_max": -108.0},
+        "Tetons/Wind River": {"lat_min": 42.5, "lat_max": 44.5, "lon_min": -111.0, "lon_max": -109.0},
+        "Wasatch (UT)": {"lat_min": 40.0, "lat_max": 41.5, "lon_min": -112.5, "lon_max": -111.0},
+        "Uintas (UT)": {"lat_min": 40.5, "lat_max": 41.0, "lon_min": -111.0, "lon_max": -109.5},
+        "San Juans (CO)": {"lat_min": 37.0, "lat_max": 38.5, "lon_min": -108.5, "lon_max": -106.5},
+        "Central CO": {"lat_min": 38.5, "lat_max": 40.0, "lon_min": -107.0, "lon_max": -105.5},
+        "Front Range (CO)": {"lat_min": 39.0, "lat_max": 41.0, "lon_min": -106.0, "lon_max": -105.0},
+        "North CO": {"lat_min": 40.0, "lat_max": 41.5, "lon_min": -107.0, "lon_max": -105.5},
+        "Southern CO": {"lat_min": 36.5, "lat_max": 37.5, "lon_min": -107.0, "lon_max": -105.0},
+        "Northern NM": {"lat_min": 35.5, "lat_max": 37.0, "lon_min": -107.5, "lon_max": -105.0},
+        "Arizona": {"lat_min": 33.5, "lat_max": 36.5, "lon_min": -112.0, "lon_max": -109.0},
+        "Idaho": {"lat_min": 43.0, "lat_max": 45.5, "lon_min": -116.0, "lon_max": -111.5},
+    }
+
+    # Get observed station data
+    sql = f"""
+    WITH recent AS (
+        SELECT a.station_triplet, a.date, a.new_snow_cm
+        FROM public.snotel_daily_accums_cm a
+        WHERE a.date >= CURRENT_DATE - INTERVAL '{days} days'
+    ),
+    agg AS (
+        SELECT
+            r.station_triplet,
+            SUM(COALESCE(r.new_snow_cm,0))::numeric AS total_cm
+        FROM recent r
+        GROUP BY r.station_triplet
+    )
+    SELECT
+        s.station_triplet,
+        s.name AS station_name,
+        s.latitude,
+        s.longitude,
+        ROUND((COALESCE(a.total_cm,0) / 2.54)::numeric, 1) AS total_in
+    FROM public.snotel_station s
+    LEFT JOIN agg a ON a.station_triplet = s.station_triplet
+    WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL
+    """
+
+    with connection.cursor() as cur:
+        cur.execute(sql)
+        cols = [c[0] for c in cur.description]
+        stations = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    # Group stations by region
+    regional_data = []
+    for region_name, bounds in regions.items():
+        region_stations = [
+            s for s in stations
+            if (bounds["lat_min"] <= s["latitude"] <= bounds["lat_max"] and
+                bounds["lon_min"] <= s["longitude"] <= bounds["lon_max"])
+        ]
+
+        if region_stations:
+            avg_snow = sum(s["total_in"] for s in region_stations) / len(region_stations)
+            center_lat = (bounds["lat_min"] + bounds["lat_max"]) / 2
+            center_lon = (bounds["lon_min"] + bounds["lon_max"]) / 2
+
+            # Return all individual station points
+            for station in region_stations:
+                regional_data.append({
+                    "region": region_name,
+                    "lat": station["latitude"],
+                    "lon": station["longitude"],
+                    "total_in": station["total_in"],
+                    "station_name": station["station_name"],
+                    "is_label": False
+                })
+
+            # Add label point
+            regional_data.append({
+                "region": region_name,
+                "lat": center_lat,
+                "lon": center_lon,
+                "total_in": round(avg_snow, 1),
+                "station_count": len(region_stations),
+                "is_label": True
+            })
+
+    return JsonResponse(regional_data, safe=False)
+
+# Snow Cam Views
+from pathlib import Path
+from datetime import datetime
+
+def snowcams(request):
+    """Snow cam timelapses viewer"""
+    return render(request, "dashboard/snowcams.html")
+
+
+def api_snowcam_videos(request):
+    """API endpoint to list available timelapse videos"""
+    timelapses_dir = Path("/snowcam-timelapses")
+    
+    # Resort patterns
+    resorts = {
+        "A-Basin": "abasin",
+        "Aspen Mountain": "aspen",
+        "Aspen Highlands": "highlands",
+        "Buttermilk": "buttermilk",
+        "Snowmass": "snowmass",
+        "Beaver Creek": "beavercreek_snowstake",
+        "Breckenridge": "breckenridge_snowstake",
+        "Copper": "copper",
+        "Crested Butte": "crestedbutte_pow",
+        "Eldora": "eldora",
+        "Keystone": "keystone_snowstake",
+        "Loveland": "loveland",
+        "Monarch": "monarch",
+        "Powderhorn": "powderhorn",
+        "Steamboat": "steamboat_snowstake",
+        "Sunlight": "sunlight_snapshot",
+        "Telluride": "telluride_powcam",
+        "Vail": "vail_snowsummit",
+        "Winter Park": "winter_park",
+    }
+    
+    videos = []
+    
+    if timelapses_dir.exists():
+        for resort_name, pattern in resorts.items():
+            # Find all videos for this resort
+            resort_videos = sorted(
+                timelapses_dir.glob(f"{pattern}_*.mp4"),
+                reverse=True  # Newest first
+            )
+            
+            for video_path in resort_videos[:7]:  # Last 7 days
+                filename = video_path.name
+                # Extract date from filename
+                try:
+                    date_str = filename.split('_')[-1].split('.')[0][:8]
+                    date = datetime.strptime(date_str, "%Y%m%d")
+                    date_display = date.strftime("%b %d, %Y")
+                except:
+                    date_display = "Unknown"
+                
+                videos.append({
+                    "resort": resort_name,
+                    "filename": filename,
+                    "date": date_display,
+                    "url": f"/media/snowcams/{filename}"
+                })
+    
+    return JsonResponse(videos, safe=False)

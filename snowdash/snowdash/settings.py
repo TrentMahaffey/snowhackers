@@ -4,7 +4,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "changeme")
-DEBUG = True
+DEBUG = False
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
@@ -58,3 +58,17 @@ DATABASES = {
 }
 
 STATIC_URL = "static/"
+
+# Caching configuration - using local memory cache for query results
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "snowhackers-cache",
+        "OPTIONS": {
+            "MAX_ENTRIES": 1000
+        }
+    }
+}
+
+# Cache timeout for query results (5 minutes)
+QUERY_CACHE_TIMEOUT = 300

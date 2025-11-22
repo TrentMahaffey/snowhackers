@@ -2,116 +2,471 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>SNOTEL Forecast Map</title>
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>SNOTEL Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    header { padding: 10px 12px; border-bottom: 1px solid #e5e5e5; display:flex; gap:12px; align-items:center; }
-    #map { height: calc(100vh - 54px); }
-    select, label { font-size: 14px; }
-    .legend { background:white; padding:8px; line-height:1.2; border:1px solid #ddd; border-radius:6px; }
-    .legend i { width:12px; height:12px; float:left; margin-right:6px; opacity:0.9; display:inline-block; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+    header {
+      padding: 12px;
+      border-bottom: 1px solid #e5e5e5;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap: wrap;
+      background: white;
+      position: relative;
+      z-index: 1000;
+    }
+    #map { height: calc(100vh - 140px); }
+
+    select, label {
+      font-size: 15px;
+      min-height: 44px;
+      padding: 8px;
+    }
+
+    select {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: white;
+    }
+
+    button {
+      font-size: 15px;
+      padding: 10px 18px;
+      min-height: 44px;
+      min-width: 44px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+      touch-action: manipulation;
+    }
+    button.active { background: #2c7ae0; color: white; border-color: #2c7ae0; }
+    button:active { transform: scale(0.98); }
+
+    .controls-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 0;
+      flex-wrap: wrap;
+    }
+    .controls-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+
+    .divider {
+      display: none;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .nav-link {
+      display: inline-block;
+      padding: 8px 16px;
+      background: #2c7ae0;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      touch-action: manipulation;
+    }
+    .nav-link:hover {
+      background: #1f5fb3;
+    }
+
+    .legend {
+      background:white;
+      padding:12px;
+      line-height:1.6;
+      border:1px solid #ddd;
+      border-radius:8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      font-size: 13px;
+    }
+    .legend i {
+      width:16px;
+      height:16px;
+      float:left;
+      margin-right:8px;
+      opacity:0.9;
+      display:inline-block;
+      border: 1px solid #ccc;
+    }
+    .legend-title {
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    /* Mobile styles */
+    @media (max-width: 768px) {
+      header {
+        padding: 10px;
+        gap: 8px;
+      }
+      #map { height: calc(100vh - 180px); }
+      button {
+        font-size: 14px;
+        padding: 12px 16px;
+      }
+      .controls-group {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .controls-group label {
+        font-size: 14px;
+      }
+      strong {
+        width: 100%;
+        font-size: 18px;
+        margin-bottom: 4px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      #map { height: calc(100vh - 200px); }
+      button {
+        flex: 1;
+        text-align: center;
+      }
+      .controls-group {
+        gap: 6px;
+      }
+    }
   </style>
 </head>
 <body>
   <header>
-    <strong>SNOTEL Forecast Map</strong>
-    <label>Window:
-      <select id="hours">
-        <option value="24">Next 24h</option>
-        <option value="48">Next 48h</option>
-        <option value="72" selected>Next 72h</option>
-      </select>
-    </label>
-    <label>Metric:
-      <select id="metric">
-        <option value="avg_in" selected>Average (in)</option>
-        <option value="max_in">Max (in)</option>
-      </select>
-    </label>
+    <strong style="margin-right: 8px;">SNOTEL Map</strong>
+
+    <div class="nav-links">
+      <a href="/tables/" class="nav-link">Dashboard</a>
+      <a href="/snowcams/" class="nav-link">Snow Cams</a>
+    </div>
+
+    <div class="controls-group">
+      <label style="font-weight: 500;">Data:</label>
+      <button id="btnForecast" class="active">Forecast</button>
+      <button id="btnObserved">Observed</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group" id="forecastControls">
+      <label>Window:
+        <select id="hours">
+          <option value="24">Next 24h</option>
+          <option value="48">Next 48h</option>
+          <option value="72" selected>Next 72h</option>
+        </select>
+      </label>
+      <label>Metric:
+        <select id="metric">
+          <option value="avg_in" selected>Average</option>
+          <option value="max_in">Maximum</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="controls-group" id="observedControls" style="display:none;">
+      <label>Past:
+        <select id="days">
+          <option value="1">1 day</option>
+          <option value="2">2 days</option>
+          <option value="3" selected>3 days</option>
+          <option value="5">5 days</option>
+          <option value="7">7 days</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="controls-group">
+      <label style="font-weight: 500;">View:</label>
+      <button id="btnMarkers" class="active">Markers</button>
+      <button id="btnHeatmap">Regional Amounts</button>
+    </div>
   </header>
+
   <div id="map"></div>
 
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script>
-    const map = L.map('map').setView([40.5, -111.5], 6); // center on central Rockies-ish; tweak as you like
+    // Map setup
+    const map = L.map('map').setView([40.5, -111.5], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 15,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Color scale (inches)
+    // Color scale
     const breaks = [0, 2, 4, 8, 12, 18, 24, 36];
     const colors = ['#eaf7ff','#cfe9ff','#a9d1ff','#7fb6ff','#5199ff','#2c7ae0','#1f5fb3','#0d3f7a'];
 
-    function getColor(x){
+    function getColor(x) {
       for (let i = breaks.length - 1; i >= 0; i--) {
         if (x >= breaks[i]) return colors[i];
       }
       return colors[0];
     }
 
+    // Legend
     const legend = L.control({position:'bottomright'});
     legend.onAdd = function(){
       const div = L.DomUtil.create('div','legend');
-      div.innerHTML = '<strong>Forecast (in)</strong><br/>';
+      div.innerHTML = '<div class="legend-title">Snow (inches)</div>';
       for (let i=0; i<breaks.length; i++){
         const from = breaks[i];
         const to = breaks[i+1];
-        div.innerHTML +=
-          `<i style="background:${colors[i]}"></i> ${from}${to ? '&ndash;'+to : '+'}<br/>`;
+        div.innerHTML += `<i style="background:${colors[i]}"></i> ${from}${to ? '&ndash;'+to : '+'}<br/>`;
       }
       return div;
     };
     legend.addTo(map);
 
+    // State
     let layerGroup = L.layerGroup().addTo(map);
+    let heatLayer = null;
+    let legendControl = null;
+    let dataSource = 'forecast'; // 'forecast' or 'observed'
+    let viewMode = 'markers'; // 'markers' or 'heatmap'
+    let currentData = [];
 
-    async function loadData(){
-      const h = document.getElementById('hours').value;
-      const metric = document.getElementById('metric').value; // 'avg_in' or 'max_in'
-      const res = await fetch(`/api/forecast_stations?h=${h}`);
-      const rows = await res.json();
+    // Load data
+    async function loadData() {
+      let url, valueKey;
 
+      if (dataSource === 'forecast') {
+        const h = document.getElementById('hours').value;
+        const metric = document.getElementById('metric').value;
+
+        if (viewMode === 'heatmap') {
+          // Use regional data for heat map
+          url = `/api/regional_forecast?h=${h}&metric=${metric}`;
+          valueKey = 'avg_in';
+        } else {
+          // Use station data for markers
+          url = `/api/forecast_stations?h=${h}`;
+          valueKey = metric;
+        }
+      } else {
+        const days = document.getElementById('days').value;
+
+        if (viewMode === 'heatmap') {
+          // Use regional data for heat map
+          url = `/api/regional_observed?days=${days}`;
+          valueKey = 'total_in';
+        } else {
+          // Use station data for markers
+          url = `/api/observed_stations?days=${days}`;
+          valueKey = 'total_in';
+        }
+      }
+
+      const res = await fetch(url);
+      currentData = await res.json();
+      console.log(`Loaded ${currentData.length} points for ${viewMode} mode from ${url}`);
+      renderMap(valueKey);
+    }
+
+    // Render map
+    function renderMap(valueKey) {
+      if (!valueKey && dataSource === 'forecast') {
+        valueKey = document.getElementById('metric').value;
+      } else if (!valueKey) {
+        valueKey = 'total_in';
+      }
+
+      // Clear layers
       layerGroup.clearLayers();
-      rows.forEach(r => {
-        const val = Number(r[metric] || 0);
-        const marker = L.circleMarker([r.lat, r.lon], {
-          radius: Math.max(4, Math.min(14, val/1.5)),
-          color: '#222',
-          weight: 0.8,
-          fillColor: getColor(val),
-          fillOpacity: 0.85
-        }).bindPopup(`
-          <strong>${r.station_name}</strong><br/>
-          ${r.station_triplet}<br/>
-          Window: ${h}h<br/>
-          Avg: ${Number(r.avg_in || 0).toFixed(1)} in<br/>
-          Max: ${Number(r.max_in || 0).toFixed(1)} in
-        `);
-        layerGroup.addLayer(marker);
-      });
+      if (heatLayer) {
+        map.removeLayer(heatLayer);
+        heatLayer = null;
+      }
+      if (legendControl) {
+        map.removeControl(legendControl);
+        legendControl = null;
+      }
 
-      // Auto-fit if we have at least a few
-      const pts = rows.filter(r => r.lat != null && r.lon != null);
+      const pts = currentData.filter(r => r.lat && r.lon);
+
+      if (viewMode === 'markers') {
+        // Render markers
+        pts.forEach(r => {
+          const val = Number(r[valueKey] || 0);
+          const marker = L.circleMarker([r.lat, r.lon], {
+            radius: Math.max(5, Math.min(15, val/1.2)),
+            color: '#333',
+            weight: 1,
+            fillColor: getColor(val),
+            fillOpacity: 0.8
+          });
+
+          let popupContent = `<strong>${r.station_name}</strong><br/>${r.station_triplet}<br/>`;
+          if (dataSource === 'forecast') {
+            const h = document.getElementById('hours').value;
+            popupContent += `Window: ${h}h<br/>`;
+            popupContent += `Avg: ${Number(r.avg_in || 0).toFixed(1)}"<br/>`;
+            popupContent += `Max: ${Number(r.max_in || 0).toFixed(1)}"`;
+          } else {
+            const days = document.getElementById('days').value;
+            popupContent += `Past ${days} day${days>1?'s':''}: ${Number(r.total_in || 0).toFixed(1)}"`;
+          }
+          marker.bindPopup(popupContent);
+          layerGroup.addLayer(marker);
+        });
+      } else {
+        // Render regional heat map
+        const labelPoints = pts.filter(r => r.is_label);
+        const dataPoints = pts.filter(r => !r.is_label);
+
+        const heatData = dataPoints.map(r => {
+          const val = Number(r[valueKey] || 0);
+          const intensity = Math.min(val / 8, 1.0);
+          return [r.lat, r.lon, intensity];
+        });
+
+        console.log(`Heat map: ${dataPoints.length} data points, ${labelPoints.length} labels`);
+
+        if (heatData.length > 0) {
+          heatLayer = L.heatLayer(heatData, {
+            radius: 35,
+            blur: 45,
+            max: 0.6,
+            gradient: {
+              0.0: '#eaf7ff',
+              0.15: '#cfe9ff',
+              0.3: '#a9d1ff',
+              0.45: '#7fb6ff',
+              0.6: '#5199ff',
+              0.75: '#2c7ae0',
+              0.9: '#1f5fb3',
+              1.0: '#0d3f7a'
+            }
+          }).addTo(map);
+        }
+
+        // Add boundary rectangles for regions
+        const regionBounds = {};
+        labelPoints.forEach(label => {
+          // Get bounds from first data point of this region
+          const regionData = dataPoints.filter(p => p.region === label.region);
+          if (regionData.length > 0) {
+            const lats = regionData.map(p => p.lat);
+            const lons = regionData.map(p => p.lon);
+            const bounds = [
+              [Math.min(...lats), Math.min(...lons)],
+              [Math.max(...lats), Math.max(...lons)]
+            ];
+
+            // Draw boundary rectangle
+            const rect = L.rectangle(bounds, {
+              color: '#333',
+              weight: 2,
+              fillOpacity: 0,
+              dashArray: '5, 5'
+            });
+            rect.bindTooltip(`${label.region}: ${label.total_in || label.avg_in}"`, {permanent: false, direction: 'center'});
+            layerGroup.addLayer(rect);
+
+            regionBounds[label.region] = label;
+          }
+        });
+
+        // Create legend control
+        legendControl = L.control({position: 'topright'});
+        legendControl.onAdd = function() {
+          const div = L.DomUtil.create('div', 'regional-legend');
+          div.style.cssText = 'background: white; padding: 10px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); max-height: 400px; overflow-y: auto; font-size: 12px;';
+
+          let html = '<div style="font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid #ddd; padding-bottom: 4px;">Regional Totals</div>';
+          const sortedLabels = labelPoints.sort((a, b) => (b.total_in || b.avg_in) - (a.total_in || a.avg_in));
+          sortedLabels.forEach(label => {
+            const val = label.total_in || label.avg_in;
+            const color = getColor(val);
+            html += `<div style="display: flex; justify-content: space-between; align-items: center; margin: 4px 0;">
+              <span style="display: inline-block; width: 12px; height: 12px; background: ${color}; border: 1px solid #999; margin-right: 6px;"></span>
+              <span style="flex: 1; font-size: 11px;">${label.region}</span>
+              <span style="font-weight: 600; margin-left: 8px;">${val}"</span>
+            </div>`;
+          });
+          div.innerHTML = html;
+          return div;
+        };
+        legendControl.addTo(map);
+      }
+
+      // Auto-fit
       if (pts.length > 2) {
         const bounds = L.latLngBounds(pts.map(p => [p.lat, p.lon]));
         map.fitBounds(bounds.pad(0.1));
       }
     }
 
-    document.getElementById('hours').addEventListener('change', loadData);
-    document.getElementById('metric').addEventListener('change', loadData);
+    // Event handlers
+    document.getElementById('btnForecast').addEventListener('click', () => {
+      dataSource = 'forecast';
+      document.getElementById('btnForecast').classList.add('active');
+      document.getElementById('btnObserved').classList.remove('active');
+      document.getElementById('forecastControls').style.display = 'flex';
+      document.getElementById('observedControls').style.display = 'none';
+      loadData();
+    });
 
+    document.getElementById('btnObserved').addEventListener('click', () => {
+      dataSource = 'observed';
+      document.getElementById('btnObserved').classList.add('active');
+      document.getElementById('btnForecast').classList.remove('active');
+      document.getElementById('observedControls').style.display = 'flex';
+      document.getElementById('forecastControls').style.display = 'none';
+      loadData();
+    });
+
+    document.getElementById('btnMarkers').addEventListener('click', () => {
+      viewMode = 'markers';
+      document.getElementById('btnMarkers').classList.add('active');
+      document.getElementById('btnHeatmap').classList.remove('active');
+      loadData(); // Always reload to switch between station/regional data
+    });
+
+    document.getElementById('btnHeatmap').addEventListener('click', () => {
+      viewMode = 'heatmap';
+      document.getElementById('btnHeatmap').classList.add('active');
+      document.getElementById('btnMarkers').classList.remove('active');
+      loadData(); // Always reload to switch between station/regional data
+    });
+
+    document.getElementById('hours').addEventListener('change', loadData);
+    document.getElementById('metric').addEventListener('change', () => {
+      if (viewMode === 'heatmap') {
+        loadData(); // Reload regional data with new metric
+      } else {
+        renderMap(); // Just re-render markers with different value
+      }
+    });
+    document.getElementById('days').addEventListener('change', loadData);
+
+    // Initial load
     loadData();
   </script>
 </body>

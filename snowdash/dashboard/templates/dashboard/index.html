@@ -2,166 +2,429 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Snow Dashboard</title>
   <style>
-    :root { --muted:#f5f5f5; --border:#e5e5e5; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 16px 0; }
-    .card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; background:#fff; }
-    a.button { display: inline-block; padding: 8px 12px; border: 1px solid #333; border-radius: 6px; text-decoration: none; }
-    section { margin-top: 32px; }
-    h1 { margin: 0 0 8px 0; }
-    h2 { margin: 24px 0 8px; }
-    h3 { margin: 16px 0 8px; }
-    table { border-collapse: collapse; margin: 8px 0 16px; width: 100%; }
-    th, td { border: 1px solid var(--border); padding: 8px; text-align: left; }
-    th { background: var(--muted); }
-    .cols-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
-    @media (max-width: 900px){ .cols-3 { grid-template-columns: 1fr; } }
-    .right { text-align: right; }
+    :root {
+      --primary: #2c7ae0;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #e5e5e5;
+      --text: #1a1a1a;
+      --text-muted: #666;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      color: var(--primary);
+    }
+    .header p {
+      margin: 4px 0 0 0;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+    .stat-card h3 {
+      margin: 0;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--primary);
+      margin: 8px 0;
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 32px 0 16px 0;
+    }
+    .section-header h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .section-header .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-left: 8px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      border-bottom: 2px solid var(--border);
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 10px 16px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    .station-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .station-card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      transition: all 0.2s;
+    }
+    .station-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transform: translateY(-2px);
+    }
+    .station-name {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    .station-id {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .snow-values {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+      gap: 8px;
+    }
+    .snow-value {
+      text-align: center;
+      padding: 8px;
+      background: var(--bg);
+      border-radius: 6px;
+    }
+    .snow-value .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .snow-value .amount {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .nav-links {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .nav-link {
+      display: inline-block;
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .nav-link:hover {
+      background: #1f5fb3;
+    }
+    @media (max-width: 600px) {
+      .header h1 { font-size: 20px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .station-grid { grid-template-columns: 1fr; }
+      .snow-values { grid-template-columns: repeat(2, 1fr); }
+    }
   </style>
 </head>
 <body>
-  <h1>Snow Dashboard</h1>
-  <p>Live data from your SnowAPI Postgres.</p>
-
-  <div class="cards">
-    <div class="card"><strong>Stations</strong><div style="font-size:28px;">{{ counts.stations }}</div></div>
-    <div class="card"><strong>Hourly Obs</strong><div style="font-size:28px;">{{ counts.hourly_obs }}</div></div>
-    <div class="card"><strong>Forecast Rows</strong><div style="font-size:28px;">{{ counts.forecast_rows }}</div></div>
+  <div class="header">
+    <h1>Snow Dashboard</h1>
+    <p>Live SNOTEL data and forecasts</p>
+    <div class="nav-links">
+      <a href="/" class="nav-link">Map</a>
+      <a href="/snowcams/" class="nav-link">Snow Cams</a>
+    </div>
   </div>
-<p><a class="button" href="{% url 'map' %}">View Map</a></p>
 
-
-  <section>
-    <h2>Top Forecasted Snow Totals (Across Models)</h2>
-    <div class="cols-3">
-      <div>
-        <h3>Next 24 Hours <small>({{ forecast_dates.h24 }})</small></h3>
-        <table>
-          <tr><th>Station</th><th class="right">Max (in)</th><th class="right">Avg (in)</th></tr>
-          {% for row in top_forecasts.h24 %}
-            <tr>
-              <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
-              <td class="right">{{ row.h24_max_in|default:0 }}</td>
-              <td class="right">{{ row.h24_avg_in|default:0 }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="3">No forecast data</td></tr>
-          {% endfor %}
-        </table>
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>Stations</h3>
+        <div class="value">{{ counts.stations }}</div>
       </div>
-      <div>
-        <h3>Next 48 Hours <small>({{ forecast_dates.h48 }})</small></h3>
-        <table>
-          <tr><th>Station</th><th class="right">Max (in)</th><th class="right">Avg (in)</th></tr>
-          {% for row in top_forecasts.h48 %}
-            <tr>
-              <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
-              <td class="right">{{ row.h48_max_in|default:0 }}</td>
-              <td class="right">{{ row.h48_avg_in|default:0 }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="3">No forecast data</td></tr>
-          {% endfor %}
-        </table>
+      <div class="stat-card">
+        <h3>Hourly Obs</h3>
+        <div class="value">{{ counts.hourly_obs }}</div>
       </div>
-      <div>
-        <h3>Next 72 Hours</h3>
-        <table>
-          <tr><th>Station</th><th class="right">Max (in)</th><th class="right">Avg (in)</th></tr>
-          {% for row in top_forecasts.h72 %}
-            <tr>
-              <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
-              <td class="right">{{ row.h72_max_in|default:0 }}</td>
-              <td class="right">{{ row.h72_avg_in|default:0 }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="3">No forecast data</td></tr>
-          {% endfor %}
-        </table>
+      <div class="stat-card">
+        <h3>Forecasts</h3>
+        <div class="value">{{ counts.forecast_rows }}</div>
       </div>
     </div>
-  </section>
 
-  <section>
-  <h2>Observed Snow Totals (SNOTEL)</h2>
-  <div class="cols-3">
-    <!-- 24-hour window -->
-    <div>
-      <h3>Last 24 Hours</h3>
-      <table>
-        <tr>
-          <th>Station</th>
-          <th class="right">Obs (in)</th>
-          <th class="right">ECMWF (in)</th>
-          <th class="right">GFS (in)</th>
-          <th class="right">ICON (in)</th>
-        </tr>
+    <div class="section-header">
+      <h2>Top Forecasted Snow</h2>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="forecast-24h">24h <span class="subtitle">({{ forecast_dates.h24 }})</span></button>
+      <button class="tab" data-tab="forecast-48h">48h <span class="subtitle">({{ forecast_dates.h48 }})</span></button>
+      <button class="tab" data-tab="forecast-72h">72h</button>
+    </div>
+
+    <div id="forecast-24h" class="tab-content active">
+      <div class="station-grid">
+        {% for row in top_forecasts.h24 %}
+          <div class="station-card">
+            <div class="station-name">{{ row.station_name }}</div>
+            <div class="station-id">{{ row.station_triplet }}</div>
+            <div class="snow-values">
+              <div class="snow-value">
+                <div class="label">Max</div>
+                <div class="amount">{{ row.h24_max_in|default:0 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">Avg</div>
+                <div class="amount">{{ row.h24_avg_in|default:0 }}"</div>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <p style="color: var(--text-muted);">No forecast data available</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="forecast-48h" class="tab-content">
+      <div class="station-grid">
+        {% for row in top_forecasts.h48 %}
+          <div class="station-card">
+            <div class="station-name">{{ row.station_name }}</div>
+            <div class="station-id">{{ row.station_triplet }}</div>
+            <div class="snow-values">
+              <div class="snow-value">
+                <div class="label">Max</div>
+                <div class="amount">{{ row.h48_max_in|default:0 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">Avg</div>
+                <div class="amount">{{ row.h48_avg_in|default:0 }}"</div>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <p style="color: var(--text-muted);">No forecast data available</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="forecast-72h" class="tab-content">
+      <div class="station-grid">
+        {% for row in top_forecasts.h72 %}
+          <div class="station-card">
+            <div class="station-name">{{ row.station_name }}</div>
+            <div class="station-id">{{ row.station_triplet }}</div>
+            <div class="snow-values">
+              <div class="snow-value">
+                <div class="label">Max</div>
+                <div class="amount">{{ row.h72_max_in|default:0 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">Avg</div>
+                <div class="amount">{{ row.h72_avg_in|default:0 }}"</div>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <p style="color: var(--text-muted);">No forecast data available</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="section-header">
+      <h2>Observed vs Forecast</h2>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="obs-24h">24h</button>
+      <button class="tab" data-tab="obs-48h">48h</button>
+      <button class="tab" data-tab="obs-72h">72h</button>
+    </div>
+
+    <div id="obs-24h" class="tab-content active">
+      <div class="station-grid">
         {% for row in recent_totals.h24 %}
-          <tr>
-            <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
-            <td class="right">{{ row.obs_in|floatformat:1 }}</td>
-            <td class="right">{{ row.ecmwf_in|floatformat:1 }}</td>
-            <td class="right">{{ row.gfs_in|floatformat:1 }}</td>
-            <td class="right">{{ row.icon_in|floatformat:1 }}</td>
-          </tr>
+          <div class="station-card">
+            <div class="station-name">{{ row.station_name }}</div>
+            <div class="station-id">{{ row.station_triplet }}</div>
+            <div class="snow-values">
+              <div class="snow-value">
+                <div class="label">Obs</div>
+                <div class="amount">{{ row.obs_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">ECMWF</div>
+                <div class="amount">{{ row.ecmwf_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">GFS</div>
+                <div class="amount">{{ row.gfs_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">ICON</div>
+                <div class="amount">{{ row.icon_in|floatformat:1 }}"</div>
+              </div>
+            </div>
+          </div>
         {% empty %}
-          <tr><td colspan="5">No observed data</td></tr>
+          <p style="color: var(--text-muted);">No observed data available</p>
         {% endfor %}
-      </table>
+      </div>
     </div>
 
-    <!-- 48-hour window -->
-    <div>
-      <h3>Last 48 Hours</h3>
-      <table>
-        <tr>
-          <th>Station</th>
-          <th class="right">Obs (in)</th>
-          <th class="right">ECMWF (in)</th>
-          <th class="right">GFS (in)</th>
-          <th class="right">ICON (in)</th>
-        </tr>
+    <div id="obs-48h" class="tab-content">
+      <div class="station-grid">
         {% for row in recent_totals.h48 %}
-          <tr>
-            <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
-            <td class="right">{{ row.obs_in|floatformat:1 }}</td>
-            <td class="right">{{ row.ecmwf_in|floatformat:1 }}</td>
-            <td class="right">{{ row.gfs_in|floatformat:1 }}</td>
-            <td class="right">{{ row.icon_in|floatformat:1 }}</td>
-          </tr>
+          <div class="station-card">
+            <div class="station-name">{{ row.station_name }}</div>
+            <div class="station-id">{{ row.station_triplet }}</div>
+            <div class="snow-values">
+              <div class="snow-value">
+                <div class="label">Obs</div>
+                <div class="amount">{{ row.obs_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">ECMWF</div>
+                <div class="amount">{{ row.ecmwf_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">GFS</div>
+                <div class="amount">{{ row.gfs_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">ICON</div>
+                <div class="amount">{{ row.icon_in|floatformat:1 }}"</div>
+              </div>
+            </div>
+          </div>
         {% empty %}
-          <tr><td colspan="5">No observed data</td></tr>
+          <p style="color: var(--text-muted);">No observed data available</p>
         {% endfor %}
-      </table>
+      </div>
     </div>
 
-    <!-- 72-hour window -->
-    <div>
-      <h3>Last 72 Hours</h3>
-      <table>
-        <tr>
-          <th>Station</th>
-          <th class="right">Obs (in)</th>
-          <th class="right">ECMWF (in)</th>
-          <th class="right">GFS (in)</th>
-          <th class="right">ICON (in)</th>
-        </tr>
+    <div id="obs-72h" class="tab-content">
+      <div class="station-grid">
         {% for row in recent_totals.h72 %}
-          <tr>
-            <td>{{ row.station_name }} <small>({{ row.station_triplet }})</small></td>
-            <td class="right">{{ row.obs_in|floatformat:1 }}</td>
-            <td class="right">{{ row.ecmwf_in|floatformat:1 }}</td>
-            <td class="right">{{ row.gfs_in|floatformat:1 }}</td>
-            <td class="right">{{ row.icon_in|floatformat:1 }}</td>
-          </tr>
+          <div class="station-card">
+            <div class="station-name">{{ row.station_name }}</div>
+            <div class="station-id">{{ row.station_triplet }}</div>
+            <div class="snow-values">
+              <div class="snow-value">
+                <div class="label">Obs</div>
+                <div class="amount">{{ row.obs_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">ECMWF</div>
+                <div class="amount">{{ row.ecmwf_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">GFS</div>
+                <div class="amount">{{ row.gfs_in|floatformat:1 }}"</div>
+              </div>
+              <div class="snow-value">
+                <div class="label">ICON</div>
+                <div class="amount">{{ row.icon_in|floatformat:1 }}"</div>
+              </div>
+            </div>
+          </div>
         {% empty %}
-          <tr><td colspan="5">No observed data</td></tr>
+          <p style="color: var(--text-muted);">No observed data available</p>
         {% endfor %}
-      </table>
+      </div>
     </div>
   </div>
-</section>
+
+  <script>
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetId = tab.dataset.tab;
+        const tabGroup = tab.closest('.tabs').nextElementSibling;
+
+        // Remove active from all tabs in this group
+        tab.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        // Hide all tab contents in this group and show target
+        let current = tabGroup;
+        while (current && current.classList.contains('tab-content')) {
+          current.classList.remove('active');
+          if (current.id === targetId) {
+            current.classList.add('active');
+          }
+          current = current.nextElementSibling;
+        }
+      });
+    });
+  </script>
 </body>
 </html>
