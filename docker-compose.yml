@@ -103,6 +103,8 @@ services:
     volumes:
       - ./snowdash:/app:delegated
       - /home/trent/snowcamtimelapse/timelapses:/snowcam-timelapses:ro
+      - /home/trent/snowcamtimelapse/timelapses7:/snowcam-timelapses7:ro
+      - /home/trent/snowcamtimelapse/timelapses30:/snowcam-timelapses30:ro
       - /home/trent/snowcamtimelapse/out:/snowcam-snapshots:ro
     command:
       - bash
@@ -130,7 +132,10 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - /home/trent/snowcamtimelapse/timelapses:/snowcam-timelapses:ro
+      - /home/trent/snowcamtimelapse/timelapses7:/snowcam-timelapses7:ro
+      - /home/trent/snowcamtimelapse/timelapses30:/snowcam-timelapses30:ro
       - /home/trent/snowcamtimelapse/out:/snowcam-snapshots:ro
+      - ./snowdash/dashboard/static:/app/dashboard/static:ro
     depends_on:
       - snowdash
     restart: unless-stopped

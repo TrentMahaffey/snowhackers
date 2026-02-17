@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <title>Colorado Snow Cams</title>
+  <link rel="icon" type="image/svg+xml" href="/static/dashboard/favicon.svg">
+  <meta name="description" content="Daily, weekly, and monthly snow cam timelapses from Colorado ski resorts">
   <style>
     :root {
       --primary: #2c7ae0;
@@ -72,12 +74,54 @@
       margin-bottom: 20px;
       box-shadow: var(--shadow);
     }
-    .filter-bar input {
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 150px;
+    }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .filter-bar input,
+    .filter-bar select {
+      padding: 10px 12px;
+      font-size: 14px;
       border: 1px solid var(--border);
       border-radius: 6px;
+      background: white;
+    }
+    .filter-bar select {
+      cursor: pointer;
+    }
+    .filter-bar input:focus,
+    .filter-bar select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(44, 122, 224, 0.1);
+    }
+    .filter-stats {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    @media (max-width: 600px) {
+      .filter-group {
+        min-width: 100%;
+      }
     }
     .resort-section {
       margin-bottom: 32px;
@@ -118,6 +162,18 @@
       width: 100%;
       height: 100%;
     }
+    .video-watermark {
+      position: absolute;
+      bottom: 40px;
+      right: 10px;
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.5;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+      pointer-events: none;
+      z-index: 10;
+    }
     .video-info {
       padding: 12px;
     }
@@ -125,6 +181,46 @@
       font-size: 14px;
       color: var(--text-muted);
       font-weight: 500;
+    }
+    .video-duration {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--primary);
+      color: white;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    .video-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .action-btn {
+      background: none;
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .action-btn:hover {
+      background: var(--bg);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .action-btn.copied {
+      background: #10b981;
+      border-color: #10b981;
+      color: white;
     }
     .loading {
       text-align: center;
@@ -140,17 +236,81 @@
       font-size: 24px;
       margin-bottom: 8px;
     }
+    /* Single video view */
+    .single-video-view {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .single-video-view .video-card {
+      max-width: 100%;
+    }
+    .single-video-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .single-video-header h2 {
+      margin: 0 0 8px 0;
+      font-size: 24px;
+    }
+    .single-video-header p {
+      margin: 0;
+      color: var(--text-muted);
+    }
+    .home-btn {
+      display: inline-block;
+      padding: 12px 24px;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 500;
+      margin-top: 20px;
+      transition: all 0.2s;
+    }
+    .home-btn:hover {
+      background: #1f5fb3;
+    }
+    .hidden {
+      display: none !important;
+    }
+    .about-section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 32px;
+      box-shadow: var(--shadow);
+    }
+    .about-section h3 {
+      margin: 0 0 12px 0;
+      font-size: 18px;
+      color: var(--primary);
+    }
+    .about-section p {
+      margin: 0 0 10px 0;
+      line-height: 1.6;
+      color: var(--text);
+    }
+    .about-section ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .about-section li {
+      margin-bottom: 6px;
+      color: var(--text);
+    }
     @media (max-width: 768px) {
       .header h1 { font-size: 20px; }
       .video-grid { grid-template-columns: 1fr; }
       .resort-header { font-size: 18px; }
+      .video-actions { flex-wrap: wrap; gap: 8px; }
+      .action-btn { flex: 1; justify-content: center; min-width: 80px; }
     }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>Colorado Snow Cams</h1>
-    <p>Daily timelapses from 19 resorts</p>
+    <p>Snow cam timelapses from Colorado resorts</p>
     <div class="nav-links">
       <a href="/" class="nav-link">Map</a>
       <a href="/tables/" class="nav-link">Dashboard</a>
@@ -158,24 +318,339 @@
   </div>
 
   <div class="container">
-    <div class="filter-bar">
-      <input type="text" id="search" placeholder="Search resorts..." />
+    <div id="filter-bar" class="filter-bar">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label for="duration-filter">Duration</label>
+          <select id="duration-filter">
+            <option value="daily">24 Hour</option>
+            <option value="weekly">7 Day</option>
+            <option value="monthly">30 Day</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="resort-filter">Resort</label>
+          <select id="resort-filter">
+            <option value="">All Resorts</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="start-date">From</label>
+          <input type="date" id="start-date" />
+        </div>
+        <div class="filter-group">
+          <label for="end-date">To</label>
+          <input type="date" id="end-date" />
+        </div>
+      </div>
+      <div id="filter-stats" class="filter-stats"></div>
     </div>
+    <script>
+      // Hide filter bar and about section immediately if single video mode (prevents flash)
+      (function() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('resort') && params.get('date') && params.get('duration')) {
+          document.getElementById('filter-bar').classList.add('hidden');
+          // About section will be hidden after it's rendered (below)
+          window._singleVideoMode = true;
+        }
+      })();
+    </script>
 
     <div id="content" class="loading">
       Loading snow cam videos...
     </div>
+
+    <div id="about-section" class="about-section">
+      <h3>About Snow Cam Timelapses</h3>
+      <p>
+        Watch automated timelapse videos from ski resorts across Colorado and the Rocky Mountain region.
+        Our cameras capture images every 5 minutes, which are compiled into smooth timelapses showing
+        weather patterns, snow accumulation, and mountain conditions.
+      </p>
+      <ul>
+        <li><strong>24 Hour</strong> - Daily timelapses updated every morning</li>
+        <li><strong>7 Day</strong> - Weekly compilation showing the past week's conditions</li>
+        <li><strong>30 Day</strong> - Monthly overview of snow and weather patterns</li>
+      </ul>
+      <p>
+        Use the filters above to find specific resorts or date ranges. Click "Share" to copy a
+        direct link to any video, or "Download" to save the video to your device.
+      </p>
+    </div>
+    <script>
+      // Hide about section immediately if single video mode
+      if (window._singleVideoMode) {
+        document.getElementById('about-section').classList.add('hidden');
+      }
+    </script>
   </div>
 
   <script>
     let allVideos = [];
+    let allResorts = [];
+
+    // Format date as YYYY-MM-DD
+    function formatDate(date) {
+      return date.toISOString().split('T')[0];
+    }
+
+    // Parse date string (handles YYYY-MM-DD format)
+    function parseDate(dateStr) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+      }
+      return new Date(dateStr);
+    }
+
+    // Parse URL parameters
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        resort: params.get('resort'),
+        date: params.get('date'),
+        duration: params.get('duration')
+      };
+    }
+
+    // Set default date range (last 7 days) or from URL
+    function setDefaultDates() {
+      const params = getUrlParams();
+      const endDate = new Date();
+      const startDate = new Date();
+
+      if (params.date) {
+        // If specific date requested, show that date +/- 1 day
+        document.getElementById('start-date').value = params.date;
+        document.getElementById('end-date').value = params.date;
+      } else {
+        startDate.setDate(startDate.getDate() - 7);
+        document.getElementById('start-date').value = formatDate(startDate);
+        document.getElementById('end-date').value = formatDate(endDate);
+      }
+    }
+
+    // Apply URL parameters to filters
+    function applyUrlParams() {
+      const params = getUrlParams();
+
+      if (params.duration) {
+        document.getElementById('duration-filter').value = params.duration;
+      }
+
+      if (params.resort) {
+        // Find matching resort (case-insensitive)
+        const resortSelect = document.getElementById('resort-filter');
+        for (let option of resortSelect.options) {
+          if (option.value.toLowerCase() === params.resort.toLowerCase()) {
+            resortSelect.value = option.value;
+            break;
+          }
+        }
+      }
+    }
+
+    // Generate shareable link for a video
+    function getShareLink(resort, date, duration) {
+      const url = new URL(window.location.href.split('?')[0]);
+      url.searchParams.set('resort', resort);
+      url.searchParams.set('date', date);
+      url.searchParams.set('duration', duration);
+      return url.toString();
+    }
+
+    // Copy share link to clipboard
+    function copyShareLink(btn, resort, date, duration) {
+      const link = getShareLink(resort, date, duration);
+      navigator.clipboard.writeText(link).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Share';
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(() => {
+        // Fallback for older browsers
+        prompt('Copy this link:', link);
+      });
+    }
+
+    // Download video - uses native share on iOS for Photos access
+    async function downloadVideo(btn, url, filename) {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+      if (isIOS && navigator.share) {
+        // On iOS, fetch video as blob and share it - this allows "Save Video" option
+        btn.textContent = 'Loading...';
+        btn.disabled = true;
+
+        try {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const file = new File([blob], filename, { type: 'video/mp4' });
+
+          await navigator.share({
+            files: [file],
+            title: filename
+          });
+          btn.textContent = 'Download';
+        } catch (err) {
+          // User cancelled or share failed - open in new tab as fallback
+          if (err.name !== 'AbortError') {
+            window.open(url, '_blank');
+          }
+          btn.textContent = 'Download';
+        } finally {
+          btn.disabled = false;
+        }
+      } else {
+        // Desktop: use traditional download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    }
+
+    // Populate resort dropdown
+    function populateResortDropdown() {
+      const select = document.getElementById('resort-filter');
+      select.innerHTML = '<option value="">All Resorts</option>';
+      allResorts.forEach(resort => {
+        const option = document.createElement('option');
+        option.value = resort;
+        option.textContent = resort;
+        select.appendChild(option);
+      });
+    }
+
+    // Filter videos based on current selections
+    function getFilteredVideos() {
+      const selectedDuration = document.getElementById('duration-filter').value;
+      const selectedResort = document.getElementById('resort-filter').value;
+      const startDate = document.getElementById('start-date').value;
+      const endDate = document.getElementById('end-date').value;
+
+      return allVideos.filter(video => {
+        // Duration filter
+        if (selectedDuration && video.duration !== selectedDuration) {
+          return false;
+        }
+
+        // Resort filter
+        if (selectedResort && video.resort !== selectedResort) {
+          return false;
+        }
+
+        // Date filter
+        const videoDate = video.date;
+        if (startDate && videoDate < startDate) {
+          return false;
+        }
+        if (endDate && videoDate > endDate) {
+          return false;
+        }
+
+        return true;
+      });
+    }
+
+    // Update filter stats display
+    function updateFilterStats(filteredCount, totalCount) {
+      const stats = document.getElementById('filter-stats');
+      if (filteredCount === totalCount) {
+        stats.textContent = `Showing all ${totalCount} videos`;
+      } else {
+        stats.textContent = `Showing ${filteredCount} of ${totalCount} videos`;
+      }
+    }
+
+    // Apply filters and re-render
+    function applyFilters() {
+      const filtered = getFilteredVideos();
+      updateFilterStats(filtered.length, allVideos.length);
+      renderVideos(filtered);
+    }
+
+    // Check if single video mode (all params present)
+    function isSingleVideoMode() {
+      const params = getUrlParams();
+      return params.resort && params.date && params.duration;
+    }
+
+    // Render single video view
+    function renderSingleVideo(video) {
+      const content = document.getElementById('content');
+      document.getElementById('filter-bar').classList.add('hidden');
+      document.getElementById('about-section').classList.add('hidden');
+
+      const durationLabels = { daily: '24 Hour', weekly: '7 Day', monthly: '30 Day' };
+
+      content.innerHTML = `
+        <div class="single-video-view">
+          <div class="single-video-header">
+            <h2>${video.resort}</h2>
+            <p>${video.date_display || video.date} - ${durationLabels[video.duration] || video.duration} Timelapse</p>
+          </div>
+          <div class="video-card">
+            <div class="video-wrapper">
+              <video controls autoplay preload="auto" playsinline>
+                <source src="${video.url}" type="video/mp4">
+                Your browser doesn't support video playback.
+              </video>
+              <div class="video-watermark">snowhackers.com</div>
+            </div>
+            <div class="video-info">
+              <div class="video-actions" style="justify-content: center; gap: 12px;">
+                <button class="action-btn" onclick="copyShareLink(this, '${video.resort}', '${video.date}', '${video.duration}')">Share</button>
+                <button class="action-btn" onclick="downloadVideo(this, '${video.url}', '${video.resort}_${video.date}_${video.duration}.mp4')">Download</button>
+              </div>
+            </div>
+          </div>
+          <div style="text-align: center;">
+            <a href="/snowcams/" class="home-btn">View All Snow Cams</a>
+          </div>
+        </div>
+      `;
+    }
 
     // Fetch videos from API
     async function loadVideos() {
       try {
         const response = await fetch('/api/snowcam_videos');
         allVideos = await response.json();
-        renderVideos(allVideos);
+
+        const params = getUrlParams();
+
+        // Check for single video mode
+        if (isSingleVideoMode()) {
+          // Find the matching video
+          const video = allVideos.find(v =>
+            v.resort.toLowerCase() === params.resort.toLowerCase() &&
+            v.date === params.date &&
+            v.duration === params.duration
+          );
+
+          if (video) {
+            renderSingleVideo(video);
+            return;
+          }
+        }
+
+        // Normal mode - show all videos with filters
+        const resortSet = new Set(allVideos.map(v => v.resort));
+        allResorts = Array.from(resortSet).sort();
+
+        // Setup UI
+        populateResortDropdown();
+        setDefaultDates();
+        applyUrlParams();
+
+        // Initial render with filters applied
+        applyFilters();
       } catch (error) {
         document.getElementById('content').innerHTML = `
           <div class="empty-state">
@@ -193,8 +668,8 @@
       if (videos.length === 0) {
         content.innerHTML = `
           <div class="empty-state">
-            <h2>No Videos Available</h2>
-            <p>Check back later for new timelapses</p>
+            <h2>No Videos Found</h2>
+            <p>Try adjusting your filters</p>
           </div>
         `;
         return;
@@ -215,20 +690,28 @@
 
       resorts.forEach(resort => {
         const resortVideos = byResort[resort];
+        // Sort videos by date descending (newest first)
+        resortVideos.sort((a, b) => b.date.localeCompare(a.date));
+
         html += `
           <div class="resort-section" data-resort="${resort.toLowerCase()}">
-            <div class="resort-header">${resort}</div>
+            <div class="resort-header">${resort} (${resortVideos.length})</div>
             <div class="video-grid">
               ${resortVideos.map(video => `
-                <div class="video-card">
+                <div class="video-card" data-resort="${video.resort}" data-date="${video.date}" data-duration="${video.duration}">
                   <div class="video-wrapper">
                     <video controls preload="metadata" playsinline>
                       <source src="${video.url}" type="video/mp4">
                       Your browser doesn't support video playback.
                     </video>
+                    <div class="video-watermark">snowhackers.com</div>
                   </div>
                   <div class="video-info">
-                    <div class="video-date">${video.date}</div>
+                    <div class="video-date">${video.date_display || video.date}<span class="video-duration">${video.duration_label || '24 Hour'}</span></div>
+                    <div class="video-actions">
+                      <button class="action-btn" onclick="copyShareLink(this, '${video.resort}', '${video.date}', '${video.duration}')">Share</button>
+                      <button class="action-btn" onclick="downloadVideo(this, '${video.url}', '${video.resort}_${video.date}_${video.duration}.mp4')">Download</button>
+                    </div>
                   </div>
                 </div>
               `).join('')}
@@ -240,20 +723,11 @@
       content.innerHTML = html;
     }
 
-    // Search filter
-    document.getElementById('search').addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase();
-      const sections = document.querySelectorAll('.resort-section');
-
-      sections.forEach(section => {
-        const resortName = section.dataset.resort;
-        if (resortName.includes(query)) {
-          section.style.display = 'block';
-        } else {
-          section.style.display = 'none';
-        }
-      });
-    });
+    // Event listeners for filters
+    document.getElementById('duration-filter').addEventListener('change', applyFilters);
+    document.getElementById('resort-filter').addEventListener('change', applyFilters);
+    document.getElementById('start-date').addEventListener('change', applyFilters);
+    document.getElementById('end-date').addEventListener('change', applyFilters);
 
     // Load videos on page load
     loadVideos();

@@ -586,8 +586,13 @@ def snowcams(request):
 
 def api_snowcam_videos(request):
     """API endpoint to list available timelapse videos"""
-    timelapses_dir = Path("/snowcam-timelapses")
-    
+    # Timelapse directories with their durations and URL paths
+    timelapse_dirs = {
+        "daily": {"path": Path("/snowcam-timelapses"), "url_prefix": "/media/snowcams/", "label": "24 Hour"},
+        "weekly": {"path": Path("/snowcam-timelapses7"), "url_prefix": "/media/snowcams7/", "label": "7 Day"},
+        "monthly": {"path": Path("/snowcam-timelapses30"), "url_prefix": "/media/snowcams30/", "label": "30 Day"},
+    }
+
     # Resort patterns
     resorts = {
         "A-Basin": "abasin",
@@ -610,32 +615,45 @@ def api_snowcam_videos(request):
         "Vail": "vail_snowsummit",
         "Winter Park": "winter_park",
     }
-    
+
     videos = []
-    
-    if timelapses_dir.exists():
+
+    for duration_key, dir_info in timelapse_dirs.items():
+        timelapses_dir = dir_info["path"]
+        if not timelapses_dir.exists():
+            continue
+
         for resort_name, pattern in resorts.items():
             # Find all videos for this resort
             resort_videos = sorted(
                 timelapses_dir.glob(f"{pattern}_*.mp4"),
                 reverse=True  # Newest first
             )
-            
-            for video_path in resort_videos[:7]:  # Last 7 days
+
+            for video_path in resort_videos[:7]:  # Last 7 entries
                 filename = video_path.name
-                # Extract date from filename
+                # Extract date from filename (use END date if range, e.g., 20251031-20251130)
                 try:
-                    date_str = filename.split('_')[-1].split('.')[0][:8]
+                    date_part = filename.split('_')[-1].split('.')[0]
+                    if '-' in date_part and len(date_part) == 17:  # Date range like 20251031-20251130
+                        date_str = date_part.split('-')[1][:8]  # Use end date
+                    else:
+                        date_str = date_part[:8]
                     date = datetime.strptime(date_str, "%Y%m%d")
                     date_display = date.strftime("%b %d, %Y")
+                    date_sort = date.strftime("%Y-%m-%d")  # For filtering
                 except:
                     date_display = "Unknown"
-                
+                    date_sort = "1970-01-01"
+
                 videos.append({
                     "resort": resort_name,
                     "filename": filename,
-                    "date": date_display,
-                    "url": f"/media/snowcams/{filename}"
+                    "date": date_sort,  # YYYY-MM-DD for filtering
+                    "date_display": date_display,  # Human-readable
+                    "url": f"{dir_info['url_prefix']}{filename}",
+                    "duration": duration_key,
+                    "duration_label": dir_info["label"],
                 })
-    
+
     return JsonResponse(videos, safe=False)

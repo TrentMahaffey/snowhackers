@@ -58,6 +58,8 @@ DATABASES = {
 }
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "dashboard" / "static"]
 
 # Caching configuration - using local memory cache for query results
 CACHES = {

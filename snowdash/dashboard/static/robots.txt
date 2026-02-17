@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://snowhackers.com/sitemap.xml
