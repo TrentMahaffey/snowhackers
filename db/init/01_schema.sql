@@ -2,7 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict ezb9t6hG6gpMQzu8xQ8F2ulbLqxvADB1dWCAwIkyidKrjAYUqbqAdg8uid7HPr2
 
 -- Dumped from database version 16.10 (Debian 16.10-1.pgdg13+1)
 -- Dumped by pg_dump version 16.10 (Debian 16.10-1.pgdg13+1)
@@ -319,5 +318,4 @@ ALTER TABLE ONLY public.forecast_hourly
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ezb9t6hG6gpMQzu8xQ8F2ulbLqxvADB1dWCAwIkyidKrjAYUqbqAdg8uid7HPr2
 
