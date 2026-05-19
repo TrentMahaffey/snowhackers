@@ -141,6 +141,13 @@ EOSSH
 log "Pulling cam_predictions_history.json to $LOCAL_HISTORY"
 rsync -a "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions_history.json" "$LOCAL_HISTORY"
 
+# 6. Re-merge labels from labels.json. predict_history.py loads its 'existing'
+#    file once at startup, so label corrections made DURING the run don't take
+#    effect. This step keeps every model row but replaces label rows with the
+#    current state of snowcammeasurement/labels/labels.json.
+log "Refreshing label rows from labels.json"
+python3 "$HERE/bin/refresh_labels_in_history.py"
+
 rm -f "$MANIFEST" "$RSYNC_LIST"
 
 TOTAL=$(jq 'length' "$LOCAL_HISTORY")
