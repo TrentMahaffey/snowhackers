@@ -82,5 +82,19 @@
     "stake_type": "depth_stake",
     "resort_label": "Loveland",
     "resort_note": "Decorative sign with blue/yellow 2-20 ruler. Read snow piled at the base of the sign."
+  },
+  {
+    "resort": "Snowbird",
+    "prefix": "snowbird_snowstake",
+    "stake_type": "depth_stake",
+    "resort_label": "Snowbird",
+    "resort_note": "Vertical metal pole with tick marks at 2/6/10/14/18/22/26 inches, blue+green Snowbird chevron sign behind. Snow piles on a cleared platform at the base — read the snow line where the mound meets the pole, NOT the chevron panels."
+  },
+  {
+    "resort": "Park City",
+    "prefix": "park_city",
+    "stake_type": "depth_stake",
+    "resort_label": "Park City",
+    "resort_note": "White wooden platform with a tall vertical 1-23 inch ruler mounted on it. Platform is heavily cleared by staff so the base typically reads 0 even after storms; read the snow line on the ruler where snow piled on the platform meets it."
   }
 ]
