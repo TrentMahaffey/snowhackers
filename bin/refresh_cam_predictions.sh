@@ -73,5 +73,70 @@ EOSSH
 log "Pulling predictions to $LOCAL_OUT"
 rsync -a "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions.json" "$LOCAL_OUT"
 
+# 5. Append today's predictions to the per-image history file so the search
+#    UI gets fresh rows even without running the full backfill.
+LOCAL_HISTORY="$HERE/cam_predictions_history.json"
+if [ -f "$LOCAL_HISTORY" ]; then
+  log "Appending latest predictions to $LOCAL_HISTORY"
+  python3 - "$LOCAL_OUT" "$LOCAL_HISTORY" <<'PY'
+import json, sys, re
+from pathlib import Path
+
+latest_path, history_path = Path(sys.argv[1]), Path(sys.argv[2])
+latest = json.loads(latest_path.read_text())
+history = json.loads(history_path.read_text())
+
+# {prefix}_{YYYYMMDD}_{HHMMSS}[_MS].jpg
+FN = re.compile(r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})(?:_\d+)?\.jpg$")
+
+def ts_from(name):
+    m = FN.match(name or "")
+    if not m: return None
+    d, t = m.group("date"), m.group("time")
+    return f"{d[:4]}-{d[4:6]}-{d[6:8]} {t[:2]}:{t[2:4]}:{t[4:]}"
+
+by_key = {(r.get("prefix"), r.get("name")): r for r in history}
+appended = 0
+for r in latest:
+    if "image" not in r or "parsed" not in r:
+        continue
+    parsed = r.get("parsed") or {}
+    if not parsed:
+        continue
+    prefix = r.get("prefix")
+    name = r.get("image")
+    key = (prefix, name)
+    old = by_key.get(key)
+    if old and old.get("source") == "label":
+        continue  # never overwrite labels
+    stake_type = r.get("stake_type") or "depth_stake"
+    if stake_type == "sherpa_bar":
+        depth = parsed.get("snowfall_24h_inches")
+        if depth is None: depth = parsed.get("snowfall_storm_inches")
+    else:
+        depth = parsed.get("depth_inches")
+    row = {
+        "prefix": prefix,
+        "ts": ts_from(name),
+        "name": name,
+        "depth_inches": depth,
+        "confidence": parsed.get("confidence"),
+        "source": "model",
+        "stake_visible": parsed.get("stake_visible"),
+        "stake_type": stake_type,
+        "predicted_at": r.get("predicted_at"),
+    }
+    if stake_type == "sherpa_bar":
+        row["snowfall_24h_inches"] = parsed.get("snowfall_24h_inches")
+        row["snowfall_storm_inches"] = parsed.get("snowfall_storm_inches")
+    by_key[key] = row
+    appended += 1
+
+merged = sorted(by_key.values(), key=lambda r: r.get("ts") or "", reverse=True)
+history_path.write_text(json.dumps(merged, indent=2) + "\n")
+print(f"  Appended {appended} new rows; history now {len(merged)} total")
+PY
+fi
+
 rm -f "$TMPLIST"
 log "Done. $(jq 'length' "$LOCAL_OUT" 2>/dev/null || echo "?") predictions written."

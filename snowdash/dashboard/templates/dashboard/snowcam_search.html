@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Snow Cam Image Search</title>
+  <link rel="icon" type="image/svg+xml" href="/static/dashboard/favicon.svg">
+  <meta name="description" content="Search individual snow stake images by resort, date range, and ML-predicted snow depth.">
+  <style>
+    :root {
+      --primary: #2c7ae0;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #e5e5e5;
+      --text: #1a1a1a;
+      --text-muted: #666;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+      --badge-high: #1c9d4a;
+      --badge-med: #d18b22;
+      --badge-low: #888;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .header h1 { margin: 0; font-size: 24px; color: var(--primary); }
+    .header p { margin: 4px 0 0 0; font-size: 14px; color: var(--text-muted); }
+    .nav-links { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+    .nav-link {
+      display: inline-block;
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .nav-link:hover { background: #1f5fb3; }
+    .nav-link.secondary {
+      background: white;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
+    .nav-link.secondary:hover { background: rgba(44, 122, 224, 0.08); }
+    .container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+    .filter-bar {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+    .filter-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    @media (max-width: 1000px) {
+      .filter-row { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .filter-row { grid-template-columns: 1fr; }
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .filter-bar input,
+    .filter-bar select {
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: white;
+      width: 100%;
+    }
+    .filter-bar input:focus,
+    .filter-bar select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(44, 122, 224, 0.1);
+    }
+    .btn {
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn:hover { background: #1f5fb3; }
+    .btn.secondary {
+      background: white;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .filter-stats {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .image-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: all 0.2s;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+    }
+    .image-card:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      transform: translateY(-2px);
+    }
+    .image-wrapper {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%;
+      background: #000;
+      overflow: hidden;
+    }
+    .image-wrapper img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: white;
+      background: var(--badge-low);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      z-index: 2;
+    }
+    .badge.high { background: var(--badge-high); }
+    .badge.med  { background: var(--badge-med); }
+    .badge.source-label {
+      top: auto;
+      bottom: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.6);
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .image-info { padding: 10px 12px; }
+    .image-info .resort {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .image-info .ts {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .pager {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin: 24px 0;
+      flex-wrap: wrap;
+    }
+    .pager button {
+      padding: 8px 14px;
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .pager button[disabled] {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .pager .current {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    .empty {
+      padding: 48px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      background: white;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .loading {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    /* lightbox */
+    .lb-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 24px;
+    }
+    .lb-backdrop.active { display: flex; }
+    .lb-content {
+      max-width: 95vw;
+      max-height: 95vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .lb-content img {
+      max-width: 100%;
+      max-height: calc(95vh - 60px);
+      border-radius: 8px;
+    }
+    .lb-caption {
+      color: white;
+      margin-top: 12px;
+      font-size: 14px;
+      text-align: center;
+    }
+    .lb-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      color: white;
+      font-size: 28px;
+      cursor: pointer;
+      background: rgba(0,0,0,0.4);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Snow Cam Image Search</h1>
+    <p>Search captured snow stake images by resort, date, and ML-predicted snow depth.</p>
+    <div class="nav-links">
+      <a href="/snowcams/" class="nav-link secondary">&laquo; Timelapses</a>
+      <a href="/" class="nav-link secondary">Home</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="filter-bar">
+      <form id="filter-form" onsubmit="event.preventDefault(); search(1);">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label for="f-resort">Resort</label>
+            <select id="f-resort" multiple size="1">
+              <option value="">All resorts</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="f-start">Start date</label>
+            <input type="date" id="f-start" />
+          </div>
+          <div class="filter-group">
+            <label for="f-end">End date</label>
+            <input type="date" id="f-end" />
+          </div>
+          <div class="filter-group">
+            <label for="f-min">Min inches</label>
+            <input type="number" id="f-min" step="0.5" min="0" placeholder="any" />
+          </div>
+          <div class="filter-group">
+            <label for="f-max">Max inches</label>
+            <input type="number" id="f-max" step="0.5" min="0" placeholder="any" />
+          </div>
+          <div class="filter-group">
+            <label for="f-sort">Sort</label>
+            <select id="f-sort">
+              <option value="ts_desc">Newest first</option>
+              <option value="ts_asc">Oldest first</option>
+              <option value="depth_desc">Deepest first</option>
+              <option value="depth_asc">Shallowest first</option>
+            </select>
+          </div>
+          <div class="filter-group" style="flex-direction: row; gap: 6px;">
+            <button class="btn" type="submit">Search</button>
+            <button class="btn secondary" type="button" onclick="resetFilters()">Reset</button>
+          </div>
+        </div>
+        <div class="filter-stats" id="stats">Loading…</div>
+      </form>
+    </div>
+
+    <div id="results-container">
+      <div class="loading">Loading images…</div>
+    </div>
+
+    <div class="pager" id="pager"></div>
+  </div>
+
+  <div class="lb-backdrop" id="lightbox" onclick="closeLightbox(event)">
+    <span class="lb-close" onclick="closeLightbox(event, true)">&times;</span>
+    <div class="lb-content" onclick="event.stopPropagation();">
+      <img id="lb-img" alt="" />
+      <div class="lb-caption" id="lb-caption"></div>
+    </div>
+  </div>
+
+  <script>
+    const PER_PAGE = 60;
+    let currentPage = 1;
+    let lastTotal = 0;
+
+    async function loadResorts() {
+      try {
+        const r = await fetch("/api/snowcam_resorts");
+        const data = await r.json();
+        const sel = document.getElementById("f-resort");
+        sel.size = Math.min(10, Math.max(4, data.resorts.length));
+        sel.innerHTML = "";
+        for (const item of data.resorts) {
+          const opt = document.createElement("option");
+          opt.value = item.prefix;
+          opt.textContent = item.label;
+          sel.appendChild(opt);
+        }
+      } catch (e) {
+        // non-fatal
+      }
+    }
+
+    function getSelectedResorts() {
+      const sel = document.getElementById("f-resort");
+      return Array.from(sel.selectedOptions).map(o => o.value).filter(v => v);
+    }
+
+    function buildQuery(page) {
+      const params = new URLSearchParams();
+      const resorts = getSelectedResorts();
+      if (resorts.length) params.set("resort", resorts.join(","));
+      const start = document.getElementById("f-start").value;
+      const end = document.getElementById("f-end").value;
+      const min = document.getElementById("f-min").value;
+      const max = document.getElementById("f-max").value;
+      const sort = document.getElementById("f-sort").value;
+      if (start) params.set("start_date", start);
+      if (end) params.set("end_date", end);
+      if (min !== "") params.set("min_inches", min);
+      if (max !== "") params.set("max_inches", max);
+      if (sort) params.set("sort", sort);
+      params.set("page", page);
+      params.set("per_page", PER_PAGE);
+      return params.toString();
+    }
+
+    function depthBadgeClass(conf) {
+      if (conf === "high") return "high";
+      if (conf === "medium" || conf === "med") return "med";
+      return "low";
+    }
+
+    function fmtTs(ts) {
+      if (!ts) return "";
+      // ts is "YYYY-MM-DD HH:MM:SS"
+      return ts.replace(" ", " · ").slice(0, 16);
+    }
+
+    async function search(page) {
+      currentPage = page || 1;
+      const url = "/api/snowcam_images?" + buildQuery(currentPage);
+      const container = document.getElementById("results-container");
+      container.innerHTML = '<div class="loading">Loading…</div>';
+      document.getElementById("pager").innerHTML = "";
+
+      let data;
+      try {
+        const r = await fetch(url);
+        data = await r.json();
+      } catch (e) {
+        container.innerHTML = '<div class="empty">Error loading: ' + e + '</div>';
+        return;
+      }
+
+      lastTotal = data.total || 0;
+      const stats = document.getElementById("stats");
+      stats.innerHTML = `
+        <span><strong>${lastTotal.toLocaleString()}</strong> images match.
+          Showing page ${data.page} of ${Math.max(1, data.pages)}.</span>
+        <span style="opacity: 0.7;">${data.source_file || ""}</span>
+      `;
+
+      if (!data.items || data.items.length === 0) {
+        container.innerHTML = '<div class="empty">No images match the current filters.</div>';
+        return;
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "image-grid";
+      for (const item of data.items) {
+        const card = document.createElement("div");
+        card.className = "image-card";
+        const depthLabel = (item.depth_inches !== null && item.depth_inches !== undefined)
+          ? `${item.depth_inches}"`
+          : null;
+        const badgeHtml = depthLabel
+          ? `<span class="badge ${depthBadgeClass(item.confidence)}">${depthLabel}</span>`
+          : "";
+        const sourceTag = item.source === "label"
+          ? `<span class="badge source-label">labeled</span>`
+          : "";
+        card.innerHTML = `
+          <div class="image-wrapper">
+            ${badgeHtml}
+            ${sourceTag}
+            <img loading="lazy" src="${item.image_url}" alt="${item.resort_label} ${item.ts}">
+          </div>
+          <div class="image-info">
+            <div class="resort">${item.resort_label}</div>
+            <div class="ts">${fmtTs(item.ts)}${depthLabel ? ` · <strong>${depthLabel}</strong>` : ""}</div>
+          </div>
+        `;
+        card.addEventListener("click", () => openLightbox(item));
+        grid.appendChild(card);
+      }
+      container.innerHTML = "";
+      container.appendChild(grid);
+
+      renderPager(data.page, data.pages);
+    }
+
+    function renderPager(page, pages) {
+      const pager = document.getElementById("pager");
+      pager.innerHTML = "";
+      if (pages <= 1) return;
+      const mk = (label, target, current = false, disabled = false) => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        if (current) b.className = "current";
+        if (disabled) b.disabled = true;
+        else b.addEventListener("click", () => search(target));
+        return b;
+      };
+      pager.appendChild(mk("« First", 1, false, page <= 1));
+      pager.appendChild(mk("‹ Prev", page - 1, false, page <= 1));
+      // window of 5 pages around current
+      const lo = Math.max(1, page - 2);
+      const hi = Math.min(pages, page + 2);
+      for (let p = lo; p <= hi; p++) {
+        pager.appendChild(mk(String(p), p, p === page));
+      }
+      pager.appendChild(mk("Next ›", page + 1, false, page >= pages));
+      pager.appendChild(mk("Last »", pages, false, page >= pages));
+    }
+
+    function resetFilters() {
+      document.getElementById("f-resort").selectedIndex = -1;
+      document.getElementById("f-start").value = "";
+      document.getElementById("f-end").value = "";
+      document.getElementById("f-min").value = "";
+      document.getElementById("f-max").value = "";
+      document.getElementById("f-sort").value = "ts_desc";
+      search(1);
+    }
+
+    function openLightbox(item) {
+      document.getElementById("lb-img").src = item.image_url;
+      const depth = (item.depth_inches !== null && item.depth_inches !== undefined)
+        ? `${item.depth_inches}" (${item.confidence || "n/a"})`
+        : "no prediction";
+      document.getElementById("lb-caption").innerHTML =
+        `<strong>${item.resort_label}</strong> · ${fmtTs(item.ts)} · ${depth}` +
+        (item.source ? ` · ${item.source}` : "");
+      document.getElementById("lightbox").classList.add("active");
+    }
+    function closeLightbox(e, force) {
+      if (force || !e || e.target.id === "lightbox" || e.target.classList.contains("lb-close")) {
+        document.getElementById("lightbox").classList.remove("active");
+      }
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeLightbox(null, true);
+    });
+
+    // boot
+    (async () => {
+      await loadResorts();
+      search(1);
+    })();
+  </script>
+</body>
+</html>

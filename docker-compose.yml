@@ -107,6 +107,7 @@ services:
       - ${SNOWCAM_TIMELAPSE30_DIR:-./snowcam/timelapses30}:/snowcam-timelapses30:ro
       - ${SNOWCAM_OUT_DIR:-./snowcam/out}:/snowcam-snapshots:ro
       - ./cam_predictions.json:/snowcam-predictions/cam_predictions.json:ro
+      - ./cam_predictions_history.json:/snowcam-predictions/cam_predictions_history.json:ro
     command:
       - bash
       - -lc

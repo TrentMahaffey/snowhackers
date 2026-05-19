@@ -701,3 +701,219 @@ def api_snowcam_predictions(request):
             except Exception as e:
                 return JsonResponse({"error": f"failed to parse {path}: {e}"}, status=500)
     return JsonResponse({"predictions": [], "error": "cam_predictions.json not found"}, status=404)
+
+
+# ---------------------------------------------------------------------------
+# Image search (per-image predictions over the captured history)
+# ---------------------------------------------------------------------------
+
+# Reverse map: filename prefix → display name (mirrors api_snowcam_videos).
+# Keep these two in sync.
+# Filename pattern used to recognize the timestamp suffix on a snowcam image.
+# Snowmass appends an extra _NNN millisecond field; treat it as optional.
+SNOWCAM_FILENAME_RE = __import__("re").compile(
+    r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})(?:_\d+)?\.jpg$"
+)
+
+SNOWCAM_PREFIX_TO_RESORT = {
+    "abasin": "A-Basin",
+    "alta_snowstake": "Alta",
+    "aspen": "Aspen Mountain",
+    "beavercreek_snowstake": "Beaver Creek",
+    "bigsky_andesite": "Big Sky",
+    "boreal": "Boreal",
+    "breckenridge_snowstake": "Breckenridge",
+    "bridgerbowl_redchair": "Bridger Bowl",
+    "brian_head": "Brian Head",
+    "buttermilk": "Buttermilk",
+    "cherry_peak": "Cherry Peak",
+    "copper": "Copper",
+    "crestedbutte_pow": "Crested Butte",
+    "discovery_snowstake": "Discovery",
+    "eldora": "Eldora",
+    "grandtarghee": "Grand Targhee",
+    "highlands": "Aspen Highlands",
+    "keystone_snowstake": "Keystone",
+    "kirkwood": "Kirkwood",
+    "loveland": "Loveland",
+    "monarch": "Monarch",
+    "northstar": "Northstar",
+    "park_city": "Park City",
+    "powder_mountain": "Powder Mountain",
+    "powderhorn": "Powderhorn",
+    "snowbird_snowstake": "Snowbird",
+    "snowmass": "Snowmass",
+    "steamboat_snowstake": "Steamboat",
+    "sundance": "Sundance",
+    "sunlight_snapshot": "Sunlight",
+    "telluride_powcam": "Telluride",
+    "vail_snowsummit": "Vail",
+    "whitefish": "Whitefish",
+    "winter_park": "Winter Park",
+}
+
+
+_history_cache = {"path": None, "mtime": None, "rows": None}
+
+
+def _load_predictions_history():
+    """Load + cache cam_predictions_history.json.
+
+    File is a flat list of records: {prefix, ts, name, depth_inches, confidence, source}.
+    Cache invalidated when the file's mtime changes.
+    """
+    import json as _json
+    candidates = [
+        Path("/snowcam-predictions/cam_predictions_history.json"),
+        Path("/home/trent/snowhackers/cam_predictions_history.json"),
+        Path(settings.BASE_DIR).parent / "cam_predictions_history.json",
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        mtime = path.stat().st_mtime
+        if _history_cache["path"] == str(path) and _history_cache["mtime"] == mtime:
+            return _history_cache["rows"], str(path)
+        try:
+            rows = _json.loads(path.read_text())
+        except Exception:
+            return [], str(path)
+        if not isinstance(rows, list):
+            rows = []
+        _history_cache.update({"path": str(path), "mtime": mtime, "rows": rows})
+        return rows, str(path)
+    return [], None
+
+
+def snowcam_search(request):
+    """Render the image-search page."""
+    return render(request, "dashboard/snowcam_search.html")
+
+
+def api_snowcam_resorts(request):
+    """List of resorts that have at least one row in the predictions history."""
+    rows, _ = _load_predictions_history()
+    seen = set()
+    out = []
+    for r in rows:
+        prefix = r.get("prefix")
+        if prefix and prefix not in seen:
+            seen.add(prefix)
+            out.append({
+                "prefix": prefix,
+                "label": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+            })
+    out.sort(key=lambda x: x["label"])
+    return JsonResponse({"resorts": out, "total": len(out)})
+
+
+def api_snowcam_images(request):
+    """Paginated image search over the predictions history.
+
+    Query params:
+      resort:      comma-separated list of filename prefixes (e.g. "alta_snowstake,park_city")
+      start_date:  YYYY-MM-DD (inclusive)
+      end_date:    YYYY-MM-DD (inclusive)
+      min_inches:  float; rows where depth_inches < min are dropped (rows with no
+                   depth are dropped UNLESS the inches filter is fully absent)
+      max_inches:  float; rows where depth_inches > max are dropped
+      page:        1-based page number (default 1)
+      per_page:    items per page (default 60, max 200)
+      sort:        "ts_desc" (default), "ts_asc", "depth_desc", "depth_asc"
+    """
+    from datetime import datetime as _dt
+
+    rows, source = _load_predictions_history()
+
+    # --- parse filters ---
+    resort_raw = request.GET.get("resort", "").strip()
+    resort_filter = {r for r in (s.strip() for s in resort_raw.split(",")) if r}
+
+    start_date = request.GET.get("start_date", "").strip()
+    end_date = request.GET.get("end_date", "").strip()
+    start_ts = f"{start_date} 00:00:00" if start_date else None
+    end_ts = f"{end_date} 23:59:59" if end_date else None
+
+    def _parse_float(name):
+        raw = request.GET.get(name, "").strip()
+        if raw == "":
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    min_inches = _parse_float("min_inches")
+    max_inches = _parse_float("max_inches")
+    inches_filter_active = (min_inches is not None) or (max_inches is not None)
+
+    try:
+        page = max(1, int(request.GET.get("page", "1") or "1"))
+    except ValueError:
+        page = 1
+    try:
+        per_page = max(1, min(200, int(request.GET.get("per_page", "60") or "60")))
+    except ValueError:
+        per_page = 60
+
+    sort = request.GET.get("sort", "ts_desc")
+
+    # --- filter ---
+    filtered = []
+    for r in rows:
+        if resort_filter and r.get("prefix") not in resort_filter:
+            continue
+        ts = r.get("ts") or ""
+        if start_ts and ts < start_ts:
+            continue
+        if end_ts and ts > end_ts:
+            continue
+        depth = r.get("depth_inches")
+        if inches_filter_active:
+            if depth is None:
+                continue
+            if min_inches is not None and depth < min_inches:
+                continue
+            if max_inches is not None and depth > max_inches:
+                continue
+        filtered.append(r)
+
+    # --- sort ---
+    if sort == "ts_asc":
+        filtered.sort(key=lambda r: r.get("ts") or "")
+    elif sort == "depth_desc":
+        filtered.sort(key=lambda r: (-(r.get("depth_inches") or -1), r.get("ts") or ""), reverse=False)
+    elif sort == "depth_asc":
+        filtered.sort(key=lambda r: ((r.get("depth_inches") if r.get("depth_inches") is not None else 1e9), r.get("ts") or ""))
+    else:  # ts_desc default
+        filtered.sort(key=lambda r: r.get("ts") or "", reverse=True)
+
+    total = len(filtered)
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_rows = filtered[start:end]
+
+    # --- shape response ---
+    items = []
+    for r in page_rows:
+        prefix = r.get("prefix") or ""
+        filename = r.get("name") or ""
+        items.append({
+            "resort_prefix": prefix,
+            "resort_label": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+            "ts": r.get("ts"),
+            "filename": filename,
+            "image_url": f"/media/snapshots/{filename}" if filename else None,
+            "depth_inches": r.get("depth_inches"),
+            "confidence": r.get("confidence"),
+            "source": r.get("source"),  # "label" | "model" | "manual"
+        })
+
+    return JsonResponse({
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+        "source_file": source,
+    })
