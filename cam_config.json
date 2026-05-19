@@ -1,0 +1,86 @@
+[
+  {
+    "resort": "A-Basin",
+    "prefix": "abasin",
+    "stake_type": "depth_stake",
+    "resort_label": "Arapahoe Basin",
+    "resort_note": "Chevron logo board with vertical 1-18 inch ruler. Read snow piled at the base of the ruler (NOT on the adjacent tab)."
+  },
+  {
+    "resort": "Alta",
+    "prefix": "alta_snowstake",
+    "stake_type": "depth_stake",
+    "resort_label": "Alta",
+    "resort_note": "Snowflake-shaped sign with 2-22 inch ruler down the middle. Read snow piled at the base of the ruler. Filenames are UTC, so many frames are night."
+  },
+  {
+    "resort": "Beaver Creek",
+    "prefix": "beavercreek_snowstake",
+    "stake_type": "depth_stake",
+    "resort_label": "Beaver Creek",
+    "resort_note": "Indoor decorative display: wooden wall, broken clock, thermometer, two chocolate-chip cookies, vertical 1-24 ruler. Mostly 0\"."
+  },
+  {
+    "resort": "Snowmass",
+    "prefix": "snowmass",
+    "stake_type": "sherpa_bar",
+    "resort_label": "Snowmass",
+    "resort_note": "Aspen/Snowmass 'Sherpa Bar': a watch flanked by two stepped wooden ladders."
+  },
+  {
+    "resort": "Aspen Mountain",
+    "prefix": "aspen",
+    "stake_type": "sherpa_bar",
+    "resort_label": "Aspen Mountain",
+    "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass."
+  },
+  {
+    "resort": "Aspen Highlands",
+    "prefix": "highlands",
+    "stake_type": "sherpa_bar",
+    "resort_label": "Aspen Highlands",
+    "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass."
+  },
+  {
+    "resort": "Buttermilk",
+    "prefix": "buttermilk",
+    "stake_type": "sherpa_bar",
+    "resort_label": "Buttermilk",
+    "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass."
+  },
+  {
+    "resort": "Winter Park",
+    "prefix": "winter_park",
+    "stake_type": "depth_stake",
+    "resort_label": "Winter Park",
+    "resort_note": "Vertical sign topped with 'Winter Park' header, red ruler 2-18 inches running down the middle. Read snow piled at the base of the sign."
+  },
+  {
+    "resort": "Breckenridge",
+    "prefix": "breckenridge_snowstake",
+    "stake_type": "depth_stake",
+    "resort_label": "Breckenridge",
+    "resort_note": "White 1-24 inch ruler on a wooden platform. Read snow piled at the base."
+  },
+  {
+    "resort": "Keystone",
+    "prefix": "keystone_snowstake",
+    "stake_type": "depth_stake",
+    "resort_label": "Keystone",
+    "resort_note": "Green 1-18 inch ruler. Read snow piled at the base of the ruler."
+  },
+  {
+    "resort": "Copper",
+    "prefix": "copper",
+    "stake_type": "depth_stake",
+    "resort_label": "Copper Mountain",
+    "resort_note": "Yellow 'SEND-O-METER' vertical 1-18 ruler with text labels (FRESHIES, POW DAY, DUMPING, DEEP, MEGA). Read snow piled at the base."
+  },
+  {
+    "resort": "Loveland",
+    "prefix": "loveland",
+    "stake_type": "depth_stake",
+    "resort_label": "Loveland",
+    "resort_note": "Decorative sign with blue/yellow 2-20 ruler. Read snow piled at the base of the sign."
+  }
+]

@@ -11,4 +11,5 @@ urlpatterns = [
     path("api/regional_forecast", views.api_regional_forecast, name="api_regional_forecast"),
     path("api/regional_observed", views.api_regional_observed, name="api_regional_observed"),
     path("api/snowcam_videos", views.api_snowcam_videos, name="api_snowcam_videos"),
+    path("api/snowcam_predictions", views.api_snowcam_predictions, name="api_snowcam_predictions"),
 ]

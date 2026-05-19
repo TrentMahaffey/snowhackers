@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>Colorado Snow Cams</title>
+  <title>Snow Cams + ML Readings</title>
   <link rel="icon" type="image/svg+xml" href="/static/dashboard/favicon.svg">
-  <meta name="description" content="Daily, weekly, and monthly snow cam timelapses from Colorado ski resorts">
+  <meta name="description" content="Daily, weekly, and monthly snow cam timelapses from CO, UT, MT, WY, ID, CA ski resorts — with ML snow-depth readings from a fine-tuned Qwen2.5-VL model">
   <style>
     :root {
       --primary: #2c7ae0;
@@ -309,8 +309,8 @@
 </head>
 <body>
   <div class="header">
-    <h1>Colorado Snow Cams</h1>
-    <p>Snow cam timelapses from Colorado resorts</p>
+    <h1>Snow Cams + ML Readings</h1>
+    <p>Western U.S. resorts — timelapses with hourly snow-depth predictions from a fine-tuned vision model</p>
     <div class="nav-links">
       <a href="/" class="nav-link">Map</a>
       <a href="/tables/" class="nav-link">Dashboard</a>
@@ -389,6 +389,32 @@
   <script>
     let allVideos = [];
     let allResorts = [];
+    let predictions = {}; // {resort_name: {depth_inches, snowfall_24h_inches, snowfall_storm_inches, confidence, captured_at}}
+
+    // Format a prediction object as a short string for display
+    function formatPrediction(p) {
+      if (!p) return null;
+      if (p.snowfall_storm_inches !== undefined && p.snowfall_storm_inches !== null) {
+        // Sherpa Bar — show both readings
+        return `${p.snowfall_24h_inches ?? '?'}" / ${p.snowfall_storm_inches ?? '?'}"`;
+      }
+      if (p.depth_inches !== undefined && p.depth_inches !== null) {
+        return `${p.depth_inches}"`;
+      }
+      return null;
+    }
+
+    // Format the prediction badge HTML (with confidence + capture time)
+    function predictionBadge(resort) {
+      const p = predictions[resort];
+      if (!p) return '';
+      const reading = formatPrediction(p);
+      if (!reading) return '';
+      const conf = p.confidence || 'low';
+      const captured = p.captured_at ? new Date(p.captured_at + 'Z').toLocaleString() : '';
+      const confColor = {high: '#10b981', medium: '#f59e0b', low: '#9ca3af'}[conf] || '#9ca3af';
+      return `<span class="ml-reading" style="margin-left: 12px; padding: 4px 10px; background: ${confColor}; color: white; border-radius: 6px; font-size: 13px; font-weight: 500;" title="ML reading at ${captured} (${conf} confidence)">📏 ${reading}</span>`;
+    }
 
     // Format date as YYYY-MM-DD
     function formatDate(date) {
@@ -617,11 +643,30 @@
       `;
     }
 
+    // Fetch model predictions (best-effort - don't fail page if this fails)
+    async function loadPredictions() {
+      try {
+        const response = await fetch('/api/snowcam_predictions');
+        if (!response.ok) return;
+        const data = await response.json();
+        const list = data.predictions || [];
+        list.forEach(p => {
+          if (p.resort) predictions[p.resort] = p;
+        });
+      } catch (err) {
+        console.warn('Predictions unavailable:', err);
+      }
+    }
+
     // Fetch videos from API
     async function loadVideos() {
       try {
-        const response = await fetch('/api/snowcam_videos');
-        allVideos = await response.json();
+        // Fetch predictions in parallel
+        const [videosResp, _] = await Promise.all([
+          fetch('/api/snowcam_videos'),
+          loadPredictions(),
+        ]);
+        allVideos = await videosResp.json();
 
         const params = getUrlParams();
 
@@ -695,7 +740,7 @@
 
         html += `
           <div class="resort-section" data-resort="${resort.toLowerCase()}">
-            <div class="resort-header">${resort} (${resortVideos.length})</div>
+            <div class="resort-header">${resort} (${resortVideos.length})${predictionBadge(resort)}</div>
             <div class="video-grid">
               ${resortVideos.map(video => `
                 <div class="video-card" data-resort="${video.resort}" data-date="${video.date}" data-duration="${video.duration}">

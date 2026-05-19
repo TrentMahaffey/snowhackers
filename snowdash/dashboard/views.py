@@ -595,6 +595,7 @@ def api_snowcam_videos(request):
 
     # Resort patterns
     resorts = {
+        # Colorado
         "A-Basin": "abasin",
         "Aspen Mountain": "aspen",
         "Aspen Highlands": "highlands",
@@ -614,6 +615,24 @@ def api_snowcam_videos(request):
         "Telluride": "telluride_powcam",
         "Vail": "vail_snowsummit",
         "Winter Park": "winter_park",
+        # Utah
+        "Alta": "alta_snowstake",
+        "Snowbird": "snowbird_snowstake",
+        "Park City": "park_city",
+        "Sundance": "sundance",
+        "Brian Head": "brian_head",
+        "Cherry Peak": "cherry_peak",
+        "Powder Mountain": "powder_mountain",
+        # Montana / Wyoming / Idaho
+        "Big Sky": "bigsky_andesite",
+        "Bridger Bowl": "bridgerbowl_redchair",
+        "Discovery": "discovery_snowstake",
+        "Grand Targhee": "grandtarghee",
+        "Whitefish": "whitefish",
+        # California / Nevada
+        "Boreal": "boreal",
+        "Kirkwood": "kirkwood",
+        "Northstar": "northstar",
     }
 
     videos = []
@@ -657,3 +676,28 @@ def api_snowcam_videos(request):
                 })
 
     return JsonResponse(videos, safe=False)
+
+
+def api_snowcam_predictions(request):
+    """Latest model-generated snow-depth predictions per resort.
+
+    Reads cam_predictions.json from the snowhackers root (mounted into the
+    container). The file is refreshed hourly by bin/refresh_cam_predictions.sh
+    which runs the fine-tuned Qwen2.5-VL model on the Blackwell.
+    """
+    from django.http import JsonResponse
+    import json as _json
+    # Look in a few candidate paths so this works in dev + container
+    candidates = [
+        Path("/snowcam-predictions/cam_predictions.json"),
+        Path("/home/trent/snowhackers/cam_predictions.json"),
+        Path(settings.BASE_DIR).parent / "cam_predictions.json",
+    ]
+    for path in candidates:
+        if path.exists():
+            try:
+                data = _json.loads(path.read_text())
+                return JsonResponse({"predictions": data, "source": str(path)}, safe=False)
+            except Exception as e:
+                return JsonResponse({"error": f"failed to parse {path}: {e}"}, status=500)
+    return JsonResponse({"predictions": [], "error": "cam_predictions.json not found"}, status=404)
