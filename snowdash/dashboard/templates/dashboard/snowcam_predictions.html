@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Snow Cam ML Predictions</title>
+  <link rel="icon" type="image/svg+xml" href="/static/dashboard/favicon.svg">
+  <meta name="description" content="Every snow cam image and the depth our fine-tuned model predicted.">
+  <style>
+    :root {
+      --primary: #2c7ae0;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #e5e5e5;
+      --text: #1a1a1a;
+      --text-muted: #666;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+      --badge-high: #1c9d4a;
+      --badge-med: #d18b22;
+      --badge-low: #888;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    }
+    .header {
+      background: white; border-bottom: 1px solid var(--border);
+      padding: 16px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
+    }
+    .header h1 { margin: 0; font-size: 24px; color: var(--primary); }
+    .header p { margin: 4px 0 0 0; font-size: 14px; color: var(--text-muted); }
+    .nav-links { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+    .nav-link {
+      display: inline-block; padding: 8px 16px; text-decoration: none;
+      border-radius: 6px; font-weight: 500; font-size: 14px;
+      background: white; color: var(--primary); border: 1px solid var(--primary);
+    }
+    .nav-link:hover { background: rgba(44, 122, 224, 0.08); }
+    .nav-link.primary { background: var(--primary); color: white; }
+    .nav-link.primary:hover { background: #1f5fb3; }
+    .resort-select {
+      padding: 8px 12px; font-size: 14px; border: 1px solid var(--border);
+      border-radius: 6px; background: white; margin-left: auto;
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+    .stats {
+      font-size: 13px; color: var(--text-muted); margin-bottom: 16px;
+    }
+    .feed {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: var(--card-bg); border-radius: 12px; overflow: hidden;
+      box-shadow: var(--shadow); transition: all 0.2s; cursor: pointer;
+      display: flex; flex-direction: column;
+    }
+    .card:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15); transform: translateY(-2px);
+    }
+    .img-wrap {
+      position: relative; width: 100%; padding-top: 75%;
+      background: #000; overflow: hidden;
+    }
+    .img-wrap img {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .reading-overlay {
+      position: absolute; top: 10px; right: 10px;
+      padding: 8px 14px; border-radius: 10px;
+      font-size: 22px; font-weight: 700;
+      color: white; background: var(--badge-low);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      letter-spacing: 0.5px;
+    }
+    .reading-overlay.high { background: var(--badge-high); }
+    .reading-overlay.med  { background: var(--badge-med); }
+    .reading-overlay .label-tag {
+      display: block; font-size: 9px; opacity: 0.9; margin-top: 2px;
+      letter-spacing: 1px; text-transform: uppercase; font-weight: 400;
+    }
+    .source-pill {
+      position: absolute; bottom: 10px; left: 10px;
+      padding: 3px 8px; border-radius: 8px; font-size: 10px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      background: rgba(0,0,0,0.65); color: white;
+    }
+    .source-pill.model { background: rgba(44, 122, 224, 0.85); }
+    .source-pill.label { background: rgba(28, 157, 74, 0.85); }
+    .card-meta {
+      padding: 10px 14px; display: flex; justify-content: space-between;
+      align-items: baseline; flex-wrap: wrap; gap: 4px;
+    }
+    .card-resort { font-weight: 600; font-size: 15px; }
+    .card-ts { font-size: 12px; color: var(--text-muted); }
+    .empty {
+      padding: 48px 16px; text-align: center; color: var(--text-muted);
+      background: white; border-radius: 8px; box-shadow: var(--shadow);
+    }
+    .pager {
+      display: flex; gap: 8px; justify-content: center;
+      margin: 24px 0; flex-wrap: wrap;
+    }
+    .pager button {
+      padding: 8px 14px; background: white; color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      cursor: pointer; font-size: 14px;
+    }
+    .pager button[disabled] { opacity: 0.4; cursor: not-allowed; }
+    .pager .current { background: var(--primary); color: white; border-color: var(--primary); }
+    /* lightbox */
+    .lb-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+      display: none; align-items: center; justify-content: center;
+      z-index: 200; padding: 24px;
+    }
+    .lb-backdrop.active { display: flex; }
+    .lb-content {
+      max-width: 95vw; max-height: 95vh;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .lb-content img {
+      max-width: 100%; max-height: calc(95vh - 80px); border-radius: 8px;
+    }
+    .lb-caption {
+      color: white; margin-top: 12px; font-size: 16px; text-align: center;
+      max-width: 800px;
+    }
+    .lb-caption .big {
+      display: block; font-size: 36px; font-weight: 700; margin-bottom: 8px;
+    }
+    .lb-close {
+      position: absolute; top: 16px; right: 16px; color: white; font-size: 28px;
+      cursor: pointer; background: rgba(0,0,0,0.5); border-radius: 50%;
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>ML Predictions Feed</h1>
+    <p>Every captured image and the snow depth our fine-tuned Qwen2.5-VL model predicted.</p>
+    <div class="nav-links">
+      <a href="/snowcams/" class="nav-link">&laquo; Timelapses</a>
+      <a href="/snowcams/search/" class="nav-link">Advanced Search</a>
+      <a href="/" class="nav-link">Home</a>
+      <select id="resort-select" class="resort-select" onchange="onResortChange()">
+        <option value="">All resorts</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="stats" id="stats">Loading…</div>
+    <div id="feed-container">
+      <div class="empty">Loading predictions…</div>
+    </div>
+    <div class="pager" id="pager"></div>
+  </div>
+
+  <div class="lb-backdrop" id="lightbox" onclick="closeLightbox(event)">
+    <span class="lb-close" onclick="closeLightbox(event, true)">&times;</span>
+    <div class="lb-content" onclick="event.stopPropagation();">
+      <img id="lb-img" alt="" />
+      <div class="lb-caption" id="lb-caption"></div>
+    </div>
+  </div>
+
+  <script>
+    const PER_PAGE = 48;
+    let currentPage = 1;
+    let currentResort = "";
+
+    async function loadResorts() {
+      try {
+        const r = await fetch("/api/snowcam_resorts");
+        const data = await r.json();
+        const sel = document.getElementById("resort-select");
+        for (const item of data.resorts) {
+          const opt = document.createElement("option");
+          opt.value = item.prefix;
+          opt.textContent = item.label;
+          sel.appendChild(opt);
+        }
+      } catch (e) { /* non-fatal */ }
+    }
+
+    function badgeClass(conf) {
+      if (conf === "high") return "high";
+      if (conf === "medium" || conf === "med") return "med";
+      return "low";
+    }
+
+    function fmtTs(ts) {
+      if (!ts) return "";
+      // Convert "YYYY-MM-DD HH:MM:SS" → "MMM D, YYYY · HH:MM"
+      const m = ts.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+      if (!m) return ts;
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      return `${months[+m[2]-1]} ${+m[3]}, ${m[1]} · ${m[4]}:${m[5]}`;
+    }
+
+    async function load(page) {
+      currentPage = page || 1;
+      const params = new URLSearchParams();
+      if (currentResort) params.set("resort", currentResort);
+      params.set("page", currentPage);
+      params.set("per_page", PER_PAGE);
+      params.set("sort", "ts_desc");
+      const container = document.getElementById("feed-container");
+      container.innerHTML = '<div class="empty">Loading…</div>';
+      document.getElementById("pager").innerHTML = "";
+
+      let data;
+      try {
+        const r = await fetch("/api/snowcam_images?" + params.toString());
+        data = await r.json();
+      } catch (e) {
+        container.innerHTML = '<div class="empty">Error loading: ' + e + '</div>';
+        return;
+      }
+
+      const total = data.total || 0;
+      const labelCount = data.items.filter(i => i.source === "label").length;
+      const modelCount = data.items.filter(i => i.source === "model").length;
+      document.getElementById("stats").innerHTML =
+        `<strong>${total.toLocaleString()}</strong> predictions ` +
+        `(page ${data.page} of ${Math.max(1, data.pages)}). ` +
+        `<span style="color: var(--badge-high); font-weight: 600;">Green</span> = high confidence, ` +
+        `<span style="color: var(--badge-med); font-weight: 600;">amber</span> = medium, gray = low. ` +
+        `Blue pill = model prediction, green pill = hand-labeled training data.`;
+
+      if (!data.items.length) {
+        container.innerHTML = '<div class="empty">No predictions yet for this resort.</div>';
+        return;
+      }
+
+      const feed = document.createElement("div");
+      feed.className = "feed";
+      for (const item of data.items) {
+        const card = document.createElement("div");
+        card.className = "card";
+        const depth = (item.depth_inches !== null && item.depth_inches !== undefined)
+          ? item.depth_inches : null;
+        const reading = depth !== null
+          ? `${depth}"<span class="label-tag">${item.confidence || ''}</span>`
+          : `<span class="label-tag">no prediction</span>`;
+        const overlayCls = depth !== null ? badgeClass(item.confidence) : "low";
+        const sourceCls = item.source === "label" ? "label" : "model";
+        const sourceText = item.source === "label" ? "labeled" : "predicted";
+        card.innerHTML = `
+          <div class="img-wrap">
+            <img loading="lazy" src="${item.image_url}" alt="${item.resort_label} ${item.ts}">
+            <div class="reading-overlay ${overlayCls}">${reading}</div>
+            <div class="source-pill ${sourceCls}">${sourceText}</div>
+          </div>
+          <div class="card-meta">
+            <span class="card-resort">${item.resort_label}</span>
+            <span class="card-ts">${fmtTs(item.ts)}</span>
+          </div>
+        `;
+        card.addEventListener("click", () => openLightbox(item));
+        feed.appendChild(card);
+      }
+      container.innerHTML = "";
+      container.appendChild(feed);
+
+      renderPager(data.page, data.pages);
+    }
+
+    function renderPager(page, pages) {
+      const pager = document.getElementById("pager");
+      pager.innerHTML = "";
+      if (pages <= 1) return;
+      const mk = (label, target, current = false, disabled = false) => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        if (current) b.className = "current";
+        if (disabled) b.disabled = true;
+        else b.addEventListener("click", () => { load(target); window.scrollTo(0, 0); });
+        return b;
+      };
+      pager.appendChild(mk("« First", 1, false, page <= 1));
+      pager.appendChild(mk("‹ Prev", page - 1, false, page <= 1));
+      const lo = Math.max(1, page - 2);
+      const hi = Math.min(pages, page + 2);
+      for (let p = lo; p <= hi; p++) pager.appendChild(mk(String(p), p, p === page));
+      pager.appendChild(mk("Next ›", page + 1, false, page >= pages));
+      pager.appendChild(mk("Last »", pages, false, page >= pages));
+    }
+
+    function onResortChange() {
+      currentResort = document.getElementById("resort-select").value;
+      load(1);
+    }
+
+    function openLightbox(item) {
+      document.getElementById("lb-img").src = item.image_url;
+      const depth = (item.depth_inches !== null && item.depth_inches !== undefined)
+        ? `${item.depth_inches}"` : "no prediction";
+      const conf = item.confidence ? ` (${item.confidence} confidence)` : "";
+      const src = item.source === "label" ? "hand-labeled training data" : "ML prediction";
+      document.getElementById("lb-caption").innerHTML = `
+        <span class="big">${depth}</span>
+        <strong>${item.resort_label}</strong> · ${fmtTs(item.ts)}<br>
+        <span style="opacity: 0.75;">${src}${conf}</span>
+      `;
+      document.getElementById("lightbox").classList.add("active");
+    }
+    function closeLightbox(e, force) {
+      if (force || !e || e.target.id === "lightbox" || e.target.classList.contains("lb-close")) {
+        document.getElementById("lightbox").classList.remove("active");
+      }
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeLightbox(null, true);
+    });
+
+    (async () => {
+      await loadResorts();
+      load(1);
+    })();
+  </script>
+</body>
+</html>

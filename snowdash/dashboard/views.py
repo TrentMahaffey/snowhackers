@@ -786,8 +786,13 @@ def _load_predictions_history():
 
 
 def snowcam_search(request):
-    """Render the image-search page."""
+    """Render the advanced image-search page (filters + pagination)."""
     return render(request, "dashboard/snowcam_search.html")
+
+
+def snowcam_predictions_page(request):
+    """Render the simple per-image predictions feed (image + model reading)."""
+    return render(request, "dashboard/snowcam_predictions.html")
 
 
 def api_snowcam_resorts(request):

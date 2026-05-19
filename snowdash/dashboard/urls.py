@@ -4,8 +4,9 @@ from . import views
 urlpatterns = [
     path("", views.map_view, name="index"),  # Map is now home
     path("tables/", views.index, name="tables"),  # Old home moved to /tables
-    path("snowcams/", views.snowcams, name="snowcams"),  # Snow cam timelapses
-    path("snowcams/search/", views.snowcam_search, name="snowcam_search"),  # Per-image search
+    path("snowcams/", views.snowcams, name="snowcams"),  # Timelapses (default)
+    path("snowcams/search/", views.snowcam_search, name="snowcam_search"),  # Advanced per-image search
+    path("snowcams/predictions/", views.snowcam_predictions_page, name="snowcam_predictions_page"),  # Simple per-image feed
     path("heatmap_test/", views.heatmap_test, name="heatmap_test"),
     path("api/forecast_stations", views.api_forecast_stations, name="api_forecast_stations"),
     path("api/observed_stations", views.api_observed_stations, name="api_observed_stations"),
