@@ -49,6 +49,13 @@
     "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass."
   },
   {
+    "resort": "Sunlight",
+    "prefix": "sunlight_snapshot",
+    "stake_type": "sherpa_bar",
+    "resort_label": "Sunlight Mountain",
+    "resort_note": "Semicircular blue/orange sunburst signboard with central tree-shaped wooden stake. Horizontal rungs labeled every 2 inches (staggered: left ladder has 4/8/12/16/20, right has 6/10/14/18). 'STORM' total on left platform shelf, '24 HOUR' on right. Read like sherpa_bar — highest rung whose label is hidden by snow pile. Valid: 0/4/6/8/10/12/14/16/18/20."
+  },
+  {
     "resort": "Winter Park",
     "prefix": "winter_park",
     "stake_type": "depth_stake",
@@ -96,5 +103,89 @@
     "stake_type": "depth_stake",
     "resort_label": "Park City",
     "resort_note": "White wooden platform with a tall vertical 1-23 inch ruler mounted on it. Platform is heavily cleared by staff so the base typically reads 0 even after storms; read the snow line on the ruler where snow piled on the platform meets it."
+  },
+  {
+    "resort": "Brian Head",
+    "prefix": "brian_head",
+    "stake_type": "depth_stake",
+    "resort_label": "Brian Head",
+    "resort_note": "Teal arch-shaped sign with painted mountains and a vertical 2-24 ruler down the middle. Read the snow line on the ruler at the base of the arch."
+  },
+  {
+    "resort": "Deer Valley",
+    "prefix": "deer_valley",
+    "stake_type": "depth_stake",
+    "resort_label": "Deer Valley",
+    "resort_note": "Wooden board with brass deer emblem and ruler marks at 3/6/9/12/15/18/21 (every 3 inches). Read snow piled at the base of the board."
+  },
+  {
+    "resort": "Discovery",
+    "prefix": "discovery_snowstake",
+    "stake_type": "depth_stake",
+    "resort_label": "Discovery Ski Area",
+    "resort_note": "Small brown vertical stake on wooden deck near a round thermometer. Ruler shows ~1-24 marks. Read snow line on the stake."
+  },
+  {
+    "resort": "Eldora",
+    "prefix": "eldora",
+    "stake_type": "depth_stake",
+    "resort_label": "Eldora",
+    "resort_note": "Illuminated orange tree-shaped marker inside a clear sphere; rungs labeled 1-14 in inches. Read highest visible rung label."
+  },
+  {
+    "resort": "Grand Targhee",
+    "prefix": "grandtarghee",
+    "stake_type": "depth_stake",
+    "resort_label": "Grand Targhee",
+    "resort_note": "Vertical clear tube 'Stick of Truth' with inch marks visible (~1-20+). Decorative figurines around base. Read the snow line where the mound meets the tube."
+  },
+  {
+    "resort": "Monarch",
+    "prefix": "monarch",
+    "stake_type": "depth_stake",
+    "resort_label": "Monarch Mountain",
+    "resort_note": "Blue platform with vertical pole stake. Ruler marks ascending; read snow line at base of pole."
+  },
+  {
+    "resort": "Northstar",
+    "prefix": "northstar",
+    "stake_type": "depth_stake",
+    "resort_label": "Northstar California",
+    "resort_note": "Maroon Northstar-branded board with TWO vertical rulers 1-25 (one left, one right). Left = 24-hour total, right = storm total. Read snow piled at base of each ruler."
+  },
+  {
+    "resort": "Powder Mountain",
+    "prefix": "powder_mountain",
+    "stake_type": "depth_stake",
+    "resort_label": "Powder Mountain",
+    "resort_note": "Stacked-pucks pole at Hidden Lake Survey Site with marks 2-30 on both sides. Read snow line where mound meets the pole."
+  },
+  {
+    "resort": "Powderhorn",
+    "prefix": "powderhorn",
+    "stake_type": "sherpa_bar",
+    "resort_label": "Powderhorn Mountain Resort",
+    "resort_note": "Crescent-moon-shaped wooden sign with staggered numbers 2/4/6/8/10/12/14/16 on a flat dark surface. Read highest hidden number when snow piles on the platform."
+  },
+  {
+    "resort": "Steamboat",
+    "prefix": "steamboat_snowstake",
+    "stake_type": "depth_stake",
+    "resort_label": "Steamboat (Champagne Powder Cam)",
+    "resort_note": "TWO vertical poles each marked 2-28. Left pole labeled 'SINCE 4:00 PM' (resets daily), right pole labeled 'RECENT STORM TOTAL'. Read snow at base of each pole."
+  },
+  {
+    "resort": "Sundance",
+    "prefix": "sundance",
+    "stake_type": "depth_stake",
+    "resort_label": "Sundance",
+    "resort_note": "Wooden sign with goggles motif and TWO vertical rulers (2-24) one left, one right. Left = 'OVERNIGHT' total, right = '24 HOURS' total. Read snow line at base of each ruler."
+  },
+  {
+    "resort": "Whitefish",
+    "prefix": "whitefish",
+    "stake_type": "depth_stake",
+    "resort_label": "Whitefish",
+    "resort_note": "Painted mountain scene with vertical 1-12 ruler 'SUMMIT SNOW CAM - Cleared Daily at 4PM'. Reads 24-hour snowfall (resets at 4PM daily, not total depth)."
   }
 ]
