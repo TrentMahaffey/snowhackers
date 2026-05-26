@@ -50,13 +50,31 @@ def main():
     labels = json.loads(LABELS_PATH.read_text())
     history = json.loads(HISTORY_PATH.read_text())
 
+    # Build a lookup: filename → model row, so we can attach the model's
+    # prior prediction onto each label row for side-by-side display.
+    model_by_key = {}
+    for r in history:
+        if r.get("source") != "model":
+            continue
+        key = (r.get("prefix"), r.get("name"))
+        if key[0] and key[1]:
+            model_by_key[key] = r
+
     fresh_labels = []
     for row in labels:
         if row.get("status") == "image_missing":
             continue
         new = label_row(row)
-        if new:
-            fresh_labels.append(new)
+        if not new:
+            continue
+        # Carry over the model's prior reading so the UI can show
+        # "your reading" + "what the model thought" side by side.
+        prior = model_by_key.get((new["prefix"], new["name"]))
+        if prior is not None:
+            new["model_depth_inches"] = prior.get("depth_inches")
+            new["model_confidence"] = prior.get("confidence")
+            new["model_predicted_at"] = prior.get("predicted_at")
+        fresh_labels.append(new)
     label_keys = {(r["prefix"], r["name"]) for r in fresh_labels}
 
     # Keep all model rows that aren't shadowed by a fresh label
@@ -68,7 +86,9 @@ def main():
     merged.sort(key=lambda r: r.get("ts") or "", reverse=True)
 
     HISTORY_PATH.write_text(json.dumps(merged, indent=2) + "\n")
-    print(f"Wrote {len(merged)} rows: {len(fresh_labels)} labels + {len(kept_model)} model")
+    n_with_model = sum(1 for r in fresh_labels if r.get("model_depth_inches") is not None)
+    print(f"Wrote {len(merged)} rows: {len(fresh_labels)} labels "
+          f"({n_with_model} with prior model reading) + {len(kept_model)} model")
     return 0
 
 

@@ -67,15 +67,33 @@
     }
     .filter-row {
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr auto;
       gap: 12px;
       align-items: flex-end;
     }
-    @media (max-width: 1000px) {
+    @media (max-width: 1200px) {
+      .filter-row { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    @media (max-width: 700px) {
       .filter-row { grid-template-columns: 1fr 1fr; }
     }
-    @media (max-width: 600px) {
+    @media (max-width: 500px) {
       .filter-row { grid-template-columns: 1fr; }
+    }
+    .filter-toggles {
+      display: flex;
+      gap: 16px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .filter-toggles label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
     }
     .filter-group { display: flex; flex-direction: column; gap: 4px; }
     .filter-group label {
@@ -184,6 +202,52 @@
       font-size: 10px;
       letter-spacing: 0.5px;
       text-transform: uppercase;
+    }
+    /* Dual-reading badges (label vs model) */
+    .readings {
+      display: flex;
+      gap: 6px;
+      padding: 0 12px 10px;
+      flex-wrap: wrap;
+    }
+    .reading-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .reading-pill .pill-label {
+      font-weight: 500;
+      opacity: 0.85;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .reading-pill .pill-value {
+      font-size: 13px;
+    }
+    .reading-pill.you {
+      background: #e8f5ee;
+      color: #146d33;
+      border: 1px solid #c3e2cf;
+    }
+    .reading-pill.model {
+      background: #fff3e0;
+      color: #8c4a00;
+      border: 1px solid #f3d5a8;
+    }
+    .reading-pill.disagree {
+      background: #fde7e7;
+      color: #b02020;
+      border: 1px solid #f3bfbf;
+    }
+    .reading-pill .delta {
+      font-size: 11px;
+      font-weight: 700;
+      opacity: 0.8;
     }
     .image-info { padding: 10px 12px; }
     .image-info .resort {
@@ -319,6 +383,23 @@
             <input type="number" id="f-max" step="0.5" min="0" placeholder="any" />
           </div>
           <div class="filter-group">
+            <label for="f-source">Source</label>
+            <select id="f-source">
+              <option value="all">All</option>
+              <option value="label">Your reading only</option>
+              <option value="model">Model only</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="f-confidence">Confidence</label>
+            <select id="f-confidence">
+              <option value="all">Any</option>
+              <option value="high">High only</option>
+              <option value="medium">Medium only</option>
+              <option value="low">Low only</option>
+            </select>
+          </div>
+          <div class="filter-group">
             <label for="f-sort">Sort</label>
             <select id="f-sort">
               <option value="ts_desc">Newest first</option>
@@ -331,6 +412,12 @@
             <button class="btn" type="submit">Search</button>
             <button class="btn secondary" type="button" onclick="resetFilters()">Reset</button>
           </div>
+        </div>
+        <div class="filter-toggles">
+          <label>
+            <input type="checkbox" id="f-disagree" />
+            Only where your reading ≠ model
+          </label>
         </div>
         <div class="filter-stats" id="stats">Loading…</div>
       </form>
@@ -388,11 +475,17 @@
       const min = document.getElementById("f-min").value;
       const max = document.getElementById("f-max").value;
       const sort = document.getElementById("f-sort").value;
+      const source = document.getElementById("f-source").value;
+      const conf = document.getElementById("f-confidence").value;
+      const disagree = document.getElementById("f-disagree").checked;
       if (start) params.set("start_date", start);
       if (end) params.set("end_date", end);
       if (min !== "") params.set("min_inches", min);
       if (max !== "") params.set("max_inches", max);
       if (sort) params.set("sort", sort);
+      if (source && source !== "all") params.set("source", source);
+      if (conf && conf !== "all") params.set("confidence", conf);
+      if (disagree) params.set("disagree", "1");
       params.set("page", page);
       params.set("per_page", PER_PAGE);
       return params.toString();
@@ -402,6 +495,64 @@
       if (conf === "high") return "high";
       if (conf === "medium" || conf === "med") return "med";
       return "low";
+    }
+
+    function fmtInches(v) {
+      if (v === null || v === undefined) return null;
+      // Drop trailing ".0" but keep ".5"
+      return (Number.isInteger(v) ? v : v.toFixed(1)).toString() + '"';
+    }
+
+    function renderReadings(item) {
+      // Render "Your reading" + "Model thought" pills for each card.
+      // - source="label": depth_inches is YOUR reading; model_depth_inches is
+      //   model's prior prediction (may be null if model hasn't seen it).
+      // - source="model": depth_inches is MODEL prediction; no human reading.
+      const pills = [];
+      const isLabel = item.source === "label";
+      const yourVal = isLabel ? fmtInches(item.depth_inches) : null;
+      const modelVal = isLabel
+        ? fmtInches(item.model_depth_inches)
+        : fmtInches(item.depth_inches);
+
+      const disagree = (
+        isLabel
+        && item.depth_inches !== null && item.depth_inches !== undefined
+        && item.model_depth_inches !== null && item.model_depth_inches !== undefined
+        && Math.abs(item.depth_inches - item.model_depth_inches) >= 0.5
+      );
+
+      if (yourVal !== null) {
+        pills.push(
+          `<span class="reading-pill you${disagree ? " disagree" : ""}">` +
+            `<span class="pill-label">You</span> ` +
+            `<span class="pill-value">${yourVal}</span>` +
+          `</span>`
+        );
+      }
+      if (modelVal !== null) {
+        let deltaHtml = "";
+        if (disagree) {
+          const d = item.model_depth_inches - item.depth_inches;
+          const sign = d > 0 ? "+" : "";
+          deltaHtml = ` <span class="delta">(${sign}${d.toFixed(1)})</span>`;
+        }
+        pills.push(
+          `<span class="reading-pill model${disagree ? " disagree" : ""}">` +
+            `<span class="pill-label">Model</span> ` +
+            `<span class="pill-value">${modelVal}</span>${deltaHtml}` +
+          `</span>`
+        );
+      } else if (isLabel) {
+        pills.push(
+          `<span class="reading-pill model" style="opacity:0.55;">` +
+            `<span class="pill-label">Model</span> ` +
+            `<span class="pill-value">—</span>` +
+          `</span>`
+        );
+      }
+      if (!pills.length) return "";
+      return `<div class="readings">${pills.join("")}</div>`;
     }
 
     function fmtTs(ts) {
@@ -461,8 +612,9 @@
           </div>
           <div class="image-info">
             <div class="resort">${item.resort_label}</div>
-            <div class="ts">${fmtTs(item.ts)}${depthLabel ? ` · <strong>${depthLabel}</strong>` : ""}</div>
+            <div class="ts">${fmtTs(item.ts)}</div>
           </div>
+          ${renderReadings(item)}
         `;
         card.addEventListener("click", () => openLightbox(item));
         grid.appendChild(card);
@@ -504,17 +656,32 @@
       document.getElementById("f-min").value = "";
       document.getElementById("f-max").value = "";
       document.getElementById("f-sort").value = "ts_desc";
+      document.getElementById("f-source").value = "all";
+      document.getElementById("f-confidence").value = "all";
+      document.getElementById("f-disagree").checked = false;
       search(1);
     }
 
     function openLightbox(item) {
       document.getElementById("lb-img").src = item.image_url;
-      const depth = (item.depth_inches !== null && item.depth_inches !== undefined)
-        ? `${item.depth_inches}" (${item.confidence || "n/a"})`
-        : "no prediction";
-      document.getElementById("lb-caption").innerHTML =
-        `<strong>${item.resort_label}</strong> · ${fmtTs(item.ts)} · ${depth}` +
-        (item.source ? ` · ${item.source}` : "");
+      const isLabel = item.source === "label";
+      const yourVal = isLabel ? fmtInches(item.depth_inches) : null;
+      const modelVal = isLabel
+        ? fmtInches(item.model_depth_inches)
+        : fmtInches(item.depth_inches);
+      const yourConf = isLabel ? (item.confidence || "n/a") : null;
+      const modelConf = isLabel ? (item.model_confidence || "n/a") : (item.confidence || "n/a");
+
+      const parts = [`<strong>${item.resort_label}</strong>`, fmtTs(item.ts)];
+      if (yourVal !== null) {
+        parts.push(`<span style="color:#7cf2a3;">You: ${yourVal}</span> (${yourConf})`);
+      }
+      if (modelVal !== null) {
+        parts.push(`<span style="color:#ffc890;">Model: ${modelVal}</span> (${modelConf})`);
+      } else if (isLabel) {
+        parts.push(`<span style="opacity:0.6;">Model: not yet predicted</span>`);
+      }
+      document.getElementById("lb-caption").innerHTML = parts.join(" · ");
       document.getElementById("lightbox").classList.add("active");
     }
     function closeLightbox(e, force) {

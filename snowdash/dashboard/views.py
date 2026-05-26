@@ -852,6 +852,13 @@ def api_snowcam_images(request):
     max_inches = _parse_float("max_inches")
     inches_filter_active = (min_inches is not None) or (max_inches is not None)
 
+    # Source filter: "all" (default), "label", "model"
+    source_filter = request.GET.get("source", "all").strip() or "all"
+    # Confidence filter: "all" (default), "high", "medium", "low"
+    conf_filter = request.GET.get("confidence", "all").strip() or "all"
+    # disagree filter: when "1", only show images where label != model prediction
+    only_disagreements = request.GET.get("disagree", "").strip() in {"1", "true"}
+
     try:
         page = max(1, int(request.GET.get("page", "1") or "1"))
     except ValueError:
@@ -880,6 +887,17 @@ def api_snowcam_images(request):
             if min_inches is not None and depth < min_inches:
                 continue
             if max_inches is not None and depth > max_inches:
+                continue
+        if source_filter != "all" and r.get("source") != source_filter:
+            continue
+        if conf_filter != "all" and r.get("confidence") != conf_filter:
+            continue
+        if only_disagreements:
+            # Only rows that have both label and model readings, where they differ.
+            md = r.get("model_depth_inches")
+            if r.get("source") != "label" or md is None or depth is None:
+                continue
+            if abs((md or 0) - (depth or 0)) < 0.5:
                 continue
         filtered.append(r)
 
@@ -912,6 +930,11 @@ def api_snowcam_images(request):
             "depth_inches": r.get("depth_inches"),
             "confidence": r.get("confidence"),
             "source": r.get("source"),  # "label" | "model" | "manual"
+            # Side-by-side: when source=="label", expose the model's prior reading
+            # (set by refresh_labels_in_history.py). When source=="model" these
+            # fields are absent — the model reading IS depth_inches.
+            "model_depth_inches": r.get("model_depth_inches"),
+            "model_confidence": r.get("model_confidence"),
         })
 
     return JsonResponse({
