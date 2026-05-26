@@ -50,15 +50,29 @@ def main():
     labels = json.loads(LABELS_PATH.read_text())
     history = json.loads(HISTORY_PATH.read_text())
 
-    # Build a lookup: filename → model row, so we can attach the model's
+    # Build a lookup: filename → model_* fields, so we can attach the model's
     # prior prediction onto each label row for side-by-side display.
+    # We pull from BOTH the bare model rows (for newly-labeled images) AND from
+    # the prior label rows themselves (which already had the carry-over baked in
+    # — this matters because once a label is added, the model row is removed
+    # from history, so subsequent refreshes would otherwise lose the data).
     model_by_key = {}
     for r in history:
-        if r.get("source") != "model":
-            continue
         key = (r.get("prefix"), r.get("name"))
-        if key[0] and key[1]:
-            model_by_key[key] = r
+        if not key[0] or not key[1]:
+            continue
+        if r.get("source") == "model":
+            model_by_key[key] = {
+                "model_depth_inches": r.get("depth_inches"),
+                "model_confidence": r.get("confidence"),
+                "model_predicted_at": r.get("predicted_at"),
+            }
+        elif r.get("source") == "label" and r.get("model_depth_inches") is not None:
+            model_by_key[key] = {
+                "model_depth_inches": r.get("model_depth_inches"),
+                "model_confidence": r.get("model_confidence"),
+                "model_predicted_at": r.get("model_predicted_at"),
+            }
 
     fresh_labels = []
     for row in labels:
@@ -71,9 +85,7 @@ def main():
         # "your reading" + "what the model thought" side by side.
         prior = model_by_key.get((new["prefix"], new["name"]))
         if prior is not None:
-            new["model_depth_inches"] = prior.get("depth_inches")
-            new["model_confidence"] = prior.get("confidence")
-            new["model_predicted_at"] = prior.get("predicted_at")
+            new.update(prior)
         fresh_labels.append(new)
     label_keys = {(r["prefix"], r["name"]) for r in fresh_labels}
 
