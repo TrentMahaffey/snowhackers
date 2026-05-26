@@ -852,6 +852,13 @@ def api_snowcam_images(request):
     max_inches = _parse_float("max_inches")
     inches_filter_active = (min_inches is not None) or (max_inches is not None)
 
+    # Separate filter on the MODEL's predicted depth (regardless of whether the
+    # row is source=label or source=model). For label rows, looks at
+    # model_depth_inches; for model rows, looks at depth_inches.
+    model_min = _parse_float("model_min_inches")
+    model_max = _parse_float("model_max_inches")
+    model_filter_active = (model_min is not None) or (model_max is not None)
+
     # Source filter: "all" (default), "label", "model"
     source_filter = request.GET.get("source", "all").strip() or "all"
     # Confidence filter: "all" (default), "high", "medium", "low"
@@ -892,6 +899,18 @@ def api_snowcam_images(request):
             continue
         if conf_filter != "all" and r.get("confidence") != conf_filter:
             continue
+        if model_filter_active:
+            # Extract the model's reading: depth_inches for model rows, or
+            # model_depth_inches that was carried over onto a label row.
+            md = (r.get("model_depth_inches")
+                  if r.get("source") == "label"
+                  else r.get("depth_inches"))
+            if md is None:
+                continue
+            if model_min is not None and md < model_min:
+                continue
+            if model_max is not None and md > model_max:
+                continue
         if only_disagreements:
             # Only rows that have both label and model readings, where they differ.
             md = r.get("model_depth_inches")

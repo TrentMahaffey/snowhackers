@@ -67,7 +67,7 @@
     }
     .filter-row {
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr auto;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr auto;
       gap: 12px;
       align-items: flex-end;
     }
@@ -375,12 +375,20 @@
             <input type="date" id="f-end" />
           </div>
           <div class="filter-group">
-            <label for="f-min">Min inches</label>
+            <label for="f-min" title="Filter on the canonical reading: label if available, else model">Min inches</label>
             <input type="number" id="f-min" step="0.5" min="0" placeholder="any" />
           </div>
           <div class="filter-group">
             <label for="f-max">Max inches</label>
             <input type="number" id="f-max" step="0.5" min="0" placeholder="any" />
+          </div>
+          <div class="filter-group">
+            <label for="f-mmin" title="Filter on the model's predicted depth only">Model min</label>
+            <input type="number" id="f-mmin" step="0.5" min="0" placeholder="any" />
+          </div>
+          <div class="filter-group">
+            <label for="f-mmax">Model max</label>
+            <input type="number" id="f-mmax" step="0.5" min="0" placeholder="any" />
           </div>
           <div class="filter-group">
             <label for="f-source">Source</label>
@@ -474,6 +482,8 @@
       const end = document.getElementById("f-end").value;
       const min = document.getElementById("f-min").value;
       const max = document.getElementById("f-max").value;
+      const mmin = document.getElementById("f-mmin").value;
+      const mmax = document.getElementById("f-mmax").value;
       const sort = document.getElementById("f-sort").value;
       const source = document.getElementById("f-source").value;
       const conf = document.getElementById("f-confidence").value;
@@ -482,6 +492,8 @@
       if (end) params.set("end_date", end);
       if (min !== "") params.set("min_inches", min);
       if (max !== "") params.set("max_inches", max);
+      if (mmin !== "") params.set("model_min_inches", mmin);
+      if (mmax !== "") params.set("model_max_inches", mmax);
       if (sort) params.set("sort", sort);
       if (source && source !== "all") params.set("source", source);
       if (conf && conf !== "all") params.set("confidence", conf);
@@ -655,6 +667,8 @@
       document.getElementById("f-end").value = "";
       document.getElementById("f-min").value = "";
       document.getElementById("f-max").value = "";
+      document.getElementById("f-mmin").value = "";
+      document.getElementById("f-mmax").value = "";
       document.getElementById("f-sort").value = "ts_desc";
       document.getElementById("f-source").value = "all";
       document.getElementById("f-confidence").value = "all";
