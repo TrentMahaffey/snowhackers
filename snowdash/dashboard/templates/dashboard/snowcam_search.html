@@ -260,6 +260,40 @@
       color: var(--text-muted);
       margin-top: 2px;
     }
+    .image-id {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-top: 1px dashed var(--border);
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: #fafafa;
+    }
+    .image-id .id-key {
+      font-weight: 700;
+      color: var(--text);
+      opacity: 0.7;
+    }
+    .image-id .id-filename {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .image-id .id-copy {
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: white;
+      border: 1px solid var(--border);
+      font-size: 10px;
+      color: var(--primary);
+      flex-shrink: 0;
+    }
+    .image-id .id-copy:hover { background: var(--primary); color: white; }
+    .image-id .id-copy.copied { background: var(--badge-high); color: white; border-color: var(--badge-high); }
     .pager {
       display: flex;
       gap: 8px;
@@ -616,6 +650,8 @@
         const sourceTag = item.source === "label"
           ? `<span class="badge source-label">labeled</span>`
           : "";
+        const idKey = item.label_id !== null && item.label_id !== undefined
+          ? `#${item.label_id}` : "—";
         card.innerHTML = `
           <div class="image-wrapper">
             ${badgeHtml}
@@ -627,8 +663,30 @@
             <div class="ts">${fmtTs(item.ts)}</div>
           </div>
           ${renderReadings(item)}
+          <div class="image-id" onclick="event.stopPropagation();">
+            <span class="id-key" title="Labels.json id (— if not labeled)">${idKey}</span>
+            <span class="id-filename" title="${item.filename}">${item.filename}</span>
+            <span class="id-copy" data-copy="${item.filename}">copy</span>
+          </div>
         `;
-        card.addEventListener("click", () => openLightbox(item));
+        // Clicking image/info opens lightbox; copy button stops propagation above.
+        card.addEventListener("click", (e) => {
+          if (e.target.classList.contains("id-copy")) return;
+          openLightbox(item);
+        });
+        const copyBtn = card.querySelector(".id-copy");
+        if (copyBtn) {
+          copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(copyBtn.dataset.copy).then(() => {
+              copyBtn.textContent = "copied!";
+              copyBtn.classList.add("copied");
+              setTimeout(() => {
+                copyBtn.textContent = "copy";
+                copyBtn.classList.remove("copied");
+              }, 1200);
+            });
+          });
+        }
         grid.appendChild(card);
       }
       container.innerHTML = "";
@@ -686,7 +744,10 @@
       const yourConf = isLabel ? (item.confidence || "n/a") : null;
       const modelConf = isLabel ? (item.model_confidence || "n/a") : (item.confidence || "n/a");
 
+      const idKey = item.label_id !== null && item.label_id !== undefined
+        ? `<span style="color:#9bb8ff;">#${item.label_id}</span>` : "";
       const parts = [`<strong>${item.resort_label}</strong>`, fmtTs(item.ts)];
+      if (idKey) parts.push(idKey);
       if (yourVal !== null) {
         parts.push(`<span style="color:#7cf2a3;">You: ${yourVal}</span> (${yourConf})`);
       }
@@ -695,7 +756,10 @@
       } else if (isLabel) {
         parts.push(`<span style="opacity:0.6;">Model: not yet predicted</span>`);
       }
-      document.getElementById("lb-caption").innerHTML = parts.join(" · ");
+      // Filename as a copyable line below
+      const captionHtml = parts.join(" · ") +
+        `<br><span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;opacity:0.8;">${item.filename}</span>`;
+      document.getElementById("lb-caption").innerHTML = captionHtml;
       document.getElementById("lightbox").classList.add("active");
     }
     function closeLightbox(e, force) {

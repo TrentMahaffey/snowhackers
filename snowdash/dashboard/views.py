@@ -949,6 +949,7 @@ def api_snowcam_images(request):
             "depth_inches": r.get("depth_inches"),
             "confidence": r.get("confidence"),
             "source": r.get("source"),  # "label" | "model" | "manual"
+            "label_id": r.get("label_id"),  # numeric id from labels.json (label rows only)
             # Side-by-side: when source=="label", expose the model's prior reading
             # (set by refresh_labels_in_history.py). When source=="model" these
             # fields are absent — the model reading IS depth_inches.
