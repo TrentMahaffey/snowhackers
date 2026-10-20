@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Snow Cam Model Accuracy</title>
+  <link rel="icon" type="image/svg+xml" href="/static/dashboard/favicon.svg">
+  <meta name="description" content="How accurate the fine-tuned snow-depth model is, demonstrated on hand-labeled snow stake images across resorts and depths.">
+  <style>
+    :root {
+      --primary: #2c7ae0;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #e5e5e5;
+      --text: #1a1a1a;
+      --text-muted: #666;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+      --good: #1c9d4a;
+      --warn: #b0731a;
+      --bad: #c43d3d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    }
+    .header {
+      background: white; border-bottom: 1px solid var(--border);
+      padding: 16px; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
+    }
+    .header h1 { margin: 0; font-size: 24px; color: var(--primary); }
+    .header p { margin: 4px 0 0 0; font-size: 14px; color: var(--text-muted); }
+    .nav-links { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+    .nav-link {
+      display: inline-block; padding: 8px 16px; text-decoration: none;
+      border-radius: 6px; font-weight: 500; font-size: 14px;
+      background: white; color: var(--primary); border: 1px solid var(--primary);
+    }
+    .nav-link:hover { background: rgba(44, 122, 224, 0.08); }
+    .nav-link.primary { background: var(--primary); color: white; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0 8px; }
+    .kpi { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
+    .kpi .v { font-size: 28px; font-weight: 700; line-height: 1.1; }
+    .kpi .l { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+    .panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; margin: 16px 0; }
+    .panel h2 { margin: 0 0 4px; font-size: 17px; }
+    .panel .sub { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
+    .split { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+    /* scatter */
+    #scatter-wrap { position: relative; }
+    #scatter { width: 100%; height: auto; display: block; }
+    .tip {
+      position: absolute; pointer-events: none; background: #fff; border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px;
+      display: none; z-index: 10; white-space: nowrap;
+    }
+    .tip b { font-size: 13px; }
+
+    table.summary { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.summary th, table.summary td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+    table.summary th { color: var(--text-muted); font-weight: 600; font-size: 12px; }
+    table.summary th:first-child, table.summary td:first-child { text-align: left; }
+    table.summary tr:last-child td { border-bottom: none; }
+
+    .resort { margin: 22px 0; }
+    .resort h3 { margin: 0 0 2px; font-size: 17px; }
+    .resort .meta { font-size: 12.5px; color: var(--text-muted); margin-bottom: 10px; }
+    .samples { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .scard { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+    .scard img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #dde3ea; cursor: zoom-in; }
+    .scard .body { padding: 10px 12px 12px; }
+    .chip { display: inline-block; font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; margin-bottom: 8px; }
+    .chip.train { color: #7a5db3; border-color: #cfc2e8; background: #f5f1fb; margin-bottom: 0; }
+    .holdout-line { font-size: 13.5px; color: var(--text-muted); margin: 4px 2px 8px; }
+    .holdout-line b { color: var(--text); }
+    .readings { display: flex; gap: 14px; align-items: baseline; }
+    .reading .num { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .reading .cap { font-size: 11px; color: var(--text-muted); }
+    .err {
+      display: inline-flex; align-items: center; gap: 4px; margin-left: auto;
+      font-size: 12.5px; font-weight: 700; color: #fff; border-radius: 6px; padding: 3px 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .err.good { background: var(--good); }
+    .err.warn { background: var(--warn); }
+    .err.bad  { background: var(--bad); }
+    .scard .foot { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; }
+
+    .note { font-size: 12.5px; color: var(--text-muted); margin: 20px 0 40px; }
+
+    /* lightbox */
+    #lightbox { position: fixed; inset: 0; background: rgba(10,14,20,.85); display: none; align-items: center; justify-content: center; z-index: 300; cursor: zoom-out; padding: 20px; }
+    #lightbox img { max-width: 96vw; max-height: 90vh; border-radius: 8px; }
+    #lightbox .cap { position: fixed; bottom: 14px; left: 0; right: 0; text-align: center; color: #dfe6ee; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>How accurate is the snow-depth model?</h1>
+    <p>Hand-labeled snow stake images vs. what the fine-tuned Qwen2.5-VL model reads — sampled per resort at roughly 0&quot;, 4&quot;, 8&quot; and 12&quot;.</p>
+    <div class="nav-links">
+      <a class="nav-link" href="/">Storms</a>
+      <a class="nav-link" href="/snowcams/">Timelapses</a>
+      <a class="nav-link" href="/snowcams/predictions/">Predictions</a>
+      <a class="nav-link" href="/snowcams/search/">Image Search</a>
+      <a class="nav-link primary" href="/snowcams/accuracy/">Accuracy</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="kpis">
+      <div class="kpi"><div class="v">{{ overall.n }}</div><div class="l">labeled sample images</div></div>
+      <div class="kpi"><div class="v">{{ overall.mae }}&Prime;</div><div class="l">mean absolute error</div></div>
+      <div class="kpi"><div class="v">{{ overall.within1 }}%</div><div class="l">within 1&Prime; of truth</div></div>
+      <div class="kpi"><div class="v">{{ overall.within2 }}%</div><div class="l">within 2&Prime; of truth</div></div>
+    </div>
+    <p class="holdout-line">On the fully held-out test set — {{ test_stats.n }} labeled images the model never saw during training — the model scores
+      <b>MAE {{ test_stats.mae }}&Prime;</b>, {{ test_stats.within1 }}% within 1&Prime;. Samples below marked
+      <span class="chip train">training image</span> were part of fine-tuning; unmarked ones are held out.</p>
+
+    <div class="panel">
+      <div class="split">
+        <div>
+          <h2>Model reading vs. measured truth</h2>
+          <div class="sub">Each dot is one labeled image. The dashed line is a perfect reading; distance from it is the error.</div>
+          <div id="scatter-wrap">
+            <svg id="scatter" viewBox="0 0 420 420" role="img" aria-label="Scatter plot of model-predicted depth versus hand-labeled depth. Points near the diagonal are accurate."></svg>
+            <div class="tip" id="tip"></div>
+          </div>
+        </div>
+        <div>
+          <h2>Per-resort summary</h2>
+          <div class="sub">Same data as the cards below, in table form.</div>
+          <table class="summary">
+            <thead><tr><th>Resort</th><th>images</th><th>MAE</th><th>bias</th><th>within 2&Prime;</th></tr></thead>
+            <tbody>
+              {% for r in resorts %}
+              <tr>
+                <td>{{ r.label }}</td>
+                <td>{{ r.n }}</td>
+                <td>{{ r.mae }}&Prime;</td>
+                <td>{{ r.bias }}&Prime;</td>
+                <td>{{ r.within2 }}%</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {% for r in resorts %}
+    <div class="resort">
+      <h3>{{ r.label }}</h3>
+      <div class="meta">{{ r.n }} labeled sample{{ r.n|pluralize }} &middot; MAE {{ r.mae }}&Prime; &middot; bias {{ r.bias }}&Prime;</div>
+      <div class="samples">
+        {% for s in r.samples %}
+        <div class="scard">
+          <img loading="lazy" src="/static/dashboard/accuracy_demo/{{ s.name }}" alt="{{ r.label }} snow stake, measured {{ s.truth }} inches" data-cap="{{ r.label }} &middot; {{ s.ts }} &middot; truth {{ s.truth }}&Prime;, model {{ s.predicted }}&Prime;">
+          <div class="body">
+            <span class="chip">&asymp;{{ s.bucket }}&Prime; conditions &middot; {{ s.ts|slice:":10" }}</span>
+            {% if s.in_training %}<span class="chip train">training image</span>{% endif %}
+            <div class="readings">
+              <div class="reading"><div class="num">{{ s.truth }}&Prime;</div><div class="cap">measured</div></div>
+              <div class="reading"><div class="num">{{ s.predicted }}&Prime;</div><div class="cap">model</div></div>
+              <span class="err {{ s.err_class }}">{{ s.err_label }}</span>
+            </div>
+            <div class="foot">model confidence: {{ s.confidence|default:"n/a" }}{% if s.unit and s.unit != "depth" %} &middot; reading is a {{ s.unit }} stake{% endif %}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="note">
+      Ground truth is a human reading of the stake in each image. Samples badged
+      &ldquo;training image&rdquo; were part of the model&rsquo;s fine-tuning data, so treat those as
+      illustrations rather than proof &mdash; the honest benchmark is the held-out test set quoted
+      above, whose error is essentially identical to this demo&rsquo;s.
+      Model: Qwen2.5-VL-7B with a LoRA fine-tune, run {{ model_run }}. Generated {{ generated_at }}.
+    </div>
+  </div>
+
+  <div id="lightbox"><img src="" alt=""><div class="cap"></div></div>
+
+  {{ points_json|json_script:"points-data" }}
+  <script>
+    // ---- scatter ----
+    const pts = JSON.parse(document.getElementById('points-data').textContent);
+    const svg = document.getElementById('scatter');
+    const tip = document.getElementById('tip');
+    const W = 420, H = 420, P = 42;
+    const maxV = Math.max(14, ...pts.map(p => Math.max(p.t, p.p))) * 1.06;
+    const sx = v => P + (v / maxV) * (W - P - 14);
+    const sy = v => H - P - (v / maxV) * (H - P - 14);
+    const NS = 'http://www.w3.org/2000/svg';
+    function el(tag, attrs, parent) {
+      const e = document.createElementNS(NS, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      (parent || svg).appendChild(e);
+      return e;
+    }
+    // grid + axes (recessive)
+    const ticks = [];
+    for (let v = 0; v <= maxV; v += 4) ticks.push(v);
+    for (const v of ticks) {
+      el('line', { x1: sx(v), y1: sy(0), x2: sx(v), y2: sy(maxV), stroke: '#eef1f4', 'stroke-width': 1 });
+      el('line', { x1: sx(0), y1: sy(v), x2: sx(maxV), y2: sy(v), stroke: '#eef1f4', 'stroke-width': 1 });
+      const tx = el('text', { x: sx(v), y: H - P + 16, 'text-anchor': 'middle', 'font-size': 11, fill: '#8a8f96' }); tx.textContent = v;
+      const ty = el('text', { x: P - 8, y: sy(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#8a8f96' }); ty.textContent = v;
+    }
+    el('line', { x1: sx(0), y1: sy(0), x2: sx(maxV), y2: sy(0), stroke: '#c9ced4', 'stroke-width': 1 });
+    el('line', { x1: sx(0), y1: sy(0), x2: sx(0), y2: sy(maxV), stroke: '#c9ced4', 'stroke-width': 1 });
+    const xl = el('text', { x: (sx(0) + sx(maxV)) / 2, y: H - 6, 'text-anchor': 'middle', 'font-size': 12, fill: '#666' }); xl.textContent = 'measured depth (in)';
+    const yl = el('text', { x: 12, y: (sy(0) + sy(maxV)) / 2, 'text-anchor': 'middle', 'font-size': 12, fill: '#666', transform: `rotate(-90 12 ${(sy(0) + sy(maxV)) / 2})` }); yl.textContent = 'model reading (in)';
+    // y = x reference
+    el('line', { x1: sx(0), y1: sy(0), x2: sx(maxV), y2: sy(maxV), stroke: '#9aa1a9', 'stroke-width': 1.5, 'stroke-dasharray': '5 4' });
+    const pl = el('text', { x: sx(maxV * 0.86), y: sy(maxV * 0.86) - 8, 'font-size': 11, fill: '#8a8f96', 'text-anchor': 'middle', transform: `rotate(-45 ${sx(maxV * 0.86)} ${sy(maxV * 0.86) - 8})` }); pl.textContent = 'perfect';
+    // legend: held-out solid, training hollow
+    el('circle', { cx: P + 8, cy: 16, r: 5, fill: '#2c7ae0', stroke: '#ffffff', 'stroke-width': 2 });
+    const l1 = el('text', { x: P + 18, y: 20, 'font-size': 11.5, fill: '#666' }); l1.textContent = 'held-out';
+    el('circle', { cx: P + 86, cy: 16, r: 5, fill: '#ffffff', stroke: '#2c7ae0', 'stroke-width': 2 });
+    const l2 = el('text', { x: P + 96, y: 20, 'font-size': 11.5, fill: '#666' }); l2.textContent = 'seen in training';
+    // points (jitter identical coords slightly so dots don't fully occlude)
+    const seen = {};
+    for (const p of pts) {
+      const key = p.t + '|' + p.p;
+      const n = seen[key] = (seen[key] || 0) + 1;
+      let jx = (n - 1) ? ((n % 2 ? 1 : -1) * Math.ceil((n - 1) / 2) * 4) : 0;
+      if (sx(p.t) + jx < sx(0)) jx = sx(0) - sx(p.t) + Math.abs(jx); // keep jitter inside the axes
+      const c = el('circle', p.h ? {
+        cx: sx(p.t) + jx, cy: sy(p.p), r: 5, fill: '#2c7ae0', 'fill-opacity': 0.85,
+        stroke: '#ffffff', 'stroke-width': 2
+      } : {
+        cx: sx(p.t) + jx, cy: sy(p.p), r: 5, fill: '#ffffff', 'fill-opacity': 0.9,
+        stroke: '#2c7ae0', 'stroke-width': 2
+      });
+      c.addEventListener('mouseenter', ev => {
+        tip.innerHTML = `<b>${p.r}</b><br>measured ${p.t}&Prime; &middot; model ${p.p}&Prime;<br>error ${p.p - p.t >= 0 ? '+' : ''}${(p.p - p.t).toFixed(1)}&Prime;`;
+        tip.style.display = 'block';
+        const wrap = document.getElementById('scatter-wrap').getBoundingClientRect();
+        const r2 = ev.target.getBoundingClientRect();
+        tip.style.left = Math.min(wrap.width - 170, r2.left - wrap.left + 14) + 'px';
+        tip.style.top = (r2.top - wrap.top - 10) + 'px';
+        c.setAttribute('r', 7);
+      });
+      c.addEventListener('mouseleave', () => { tip.style.display = 'none'; c.setAttribute('r', 5); });
+    }
+
+    // ---- lightbox ----
+    const lb = document.getElementById('lightbox');
+    const lbImg = lb.querySelector('img');
+    const lbCap = lb.querySelector('.cap');
+    document.querySelectorAll('.scard img').forEach(img => {
+      img.addEventListener('click', () => {
+        lbImg.src = img.src; lbCap.innerHTML = img.dataset.cap; lb.style.display = 'flex';
+      });
+    });
+    lb.addEventListener('click', () => { lb.style.display = 'none'; lbImg.src = ''; });
+  </script>
+</body>
+</html>

@@ -314,7 +314,9 @@
     <div class="nav-links">
       <a href="/snowcams/predictions/" class="nav-link">📏 ML Predictions Feed</a>
       <a href="/snowcams/search/" class="nav-link">🔍 Advanced Search</a>
-      <a href="/" class="nav-link">Map</a>
+      <a href="/snowcams/accuracy/" class="nav-link">🎯 Model Accuracy</a>
+      <a href="/" class="nav-link">Storms</a>
+      <a href="/map/" class="nav-link">Map</a>
       <a href="/tables/" class="nav-link">Dashboard</a>
     </div>
   </div>
@@ -412,8 +414,14 @@
       if (!p) return '';
       const reading = formatPrediction(p);
       if (!reading) return '';
+      const capturedAt = p.captured_at ? new Date(p.captured_at + 'Z') : null;
+      // A reading from an old frame (cam down / off-season) must not look current.
+      if (!capturedAt || (Date.now() - capturedAt.getTime()) > 6 * 3600 * 1000) {
+        const when = capturedAt ? capturedAt.toLocaleDateString() : 'unknown';
+        return `<span class="ml-reading" style="margin-left: 12px; padding: 4px 10px; background: #e5e7eb; color: #6b7280; border-radius: 6px; font-size: 13px; font-weight: 500;" title="No fresh stake image; last frame ${when}">📷 cam offline · last ${when}</span>`;
+      }
       const conf = p.confidence || 'low';
-      const captured = p.captured_at ? new Date(p.captured_at + 'Z').toLocaleString() : '';
+      const captured = capturedAt.toLocaleString();
       const confColor = {high: '#10b981', medium: '#f59e0b', low: '#9ca3af'}[conf] || '#9ca3af';
       return `<span class="ml-reading" style="margin-left: 12px; padding: 4px 10px; background: ${confColor}; color: white; border-radius: 6px; font-size: 13px; font-weight: 500;" title="ML reading at ${captured} (${conf} confidence)">📏 ${reading}</span>`;
     }

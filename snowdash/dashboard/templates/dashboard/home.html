@@ -1,0 +1,196 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SnowHackers — Storm Cams</title>
+  <meta name="description" content="Timelapses of the biggest storms on Western ski resort snow stakes, live stake cams, and AI snow readings.">
+  <link rel="icon" type="image/svg+xml" href="/static/dashboard/favicon.svg">
+  {% if hero %}<meta property="og:image" content="{{ hero.poster }}">{% endif %}
+  <link rel="stylesheet" href="/static/dashboard/showcase.css?v=3">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/">❄ Snow<span>Hackers</span></a>
+      <nav>
+        <a class="on" href="/">Storms</a>
+        <a href="/forecast/">Forecast</a>
+        <a href="/snowcams/">All timelapses</a>
+        <a href="/map/">SNOTEL map</a>
+        <a href="/snowcams/search/">Image search</a>
+        <a href="/snowcams/accuracy/">Model accuracy</a>
+      </nav>
+    </div>
+  </header>
+
+  {% if hero %}
+  <div class="hero">
+    <video autoplay muted loop playsinline preload="auto" poster="{{ hero.poster }}" aria-label="Timelapse of the {{ hero.resort }} storm">
+      <source src="{{ hero.video }}" type="video/mp4">
+    </video>
+    <div class="shade"></div>
+    <div class="cap">
+      <div class="wrap">
+        <div class="eyebrow">{% if hero.pinned %}Featured storm{% elif hero.season == current_season %}Latest storm{% else %}Storm of last season{% endif %}</div>
+        <h1>{{ hero.resort }}</h1>
+        <div class="when">{{ hero.dates_label }}</div>
+        <div class="stats">
+          <div class="stat"><b>{{ hero.storm_total_in|floatformat:"-1" }}″</b><small>storm total on the stake</small></div>
+          <div class="stat"><b>{{ hero.max_day_in|floatformat:"-1" }}″</b><small>biggest day</small></div>
+          <div class="stat"><b>{{ hero.days }}</b><small>day{{ hero.days|pluralize }} of snow</small></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-open="{{ hero.video }}" data-title="{{ hero.resort }} · {{ hero.dates_label }}" data-resort="{{ hero.prefix }}">▶ Watch full screen</button>
+          <a class="btn" href="/resort/{{ hero.prefix }}/">{{ hero.resort }} cam →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="hero-empty wrap">
+    <div class="eyebrow">Storm cams</div>
+    <h1>Waiting for the first storm</h1>
+    <p>Storm timelapses appear here automatically when snow piles up on a stake.</p>
+  </div>
+  {% endif %}
+
+  <div class="strip">
+    <div class="wrap">
+      <span><i class="dot"></i>{{ live_count }} of {{ cam_count }} stake cams live</span>
+      <span>{{ storm_count }} storm timelapse{{ storm_count|pluralize }}</span>
+      <span>Snow readings by a fine-tuned vision model; every storm clip confirmed by nearby SNOTEL stations</span>
+    </div>
+  </div>
+
+
+  {% if forecast_strip %}
+  <div class="strip fstrip">
+    <div class="wrap">
+      <b>Next 7 days:</b>
+      {% for z in forecast_strip %}<a href="/forecast/#{{ z.id }}">{{ z.name }} <strong>{{ z.r7d }}</strong></a>{% endfor %}
+      <a href="/forecast/">Full forecast →</a>
+    </div>
+  </div>
+  {% endif %}
+  <main class="wrap">
+    {% if gallery %}
+    <section id="storms">
+      <div class="sec-head">
+        <div>
+          <h2>Biggest storms</h2>
+          <div class="sub">Each clip runs from the day before the storm to the day after. Hover to preview, click to watch.</div>
+        </div>
+        {% if seasons|length > 1 %}
+        <div class="chips" role="group" aria-label="Season">
+          <button class="chip on" data-season="all">All</button>
+          {% for s in seasons %}<button class="chip" data-season="{{ s }}">{{ s }}</button>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="grid">
+        {% for h in gallery %}
+        <button class="card" data-season="{{ h.season }}" data-video="{{ h.video }}" data-open="{{ h.video }}"
+                data-title="{{ h.resort }} · {{ h.dates_label }}" data-resort="{{ h.prefix }}">
+          <div class="thumb">
+            <img src="{{ h.poster }}" alt="{{ h.resort }} snow stake during the storm" loading="lazy">
+            <span class="badge">{{ h.storm_total_in|floatformat:"-1" }}″<small>storm</small></span>
+            {% if h.pinned %}<span class="pin">PICK</span>{% endif %}
+            <span class="play" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 1.5v11l9-5.5z" fill="#fff"/></svg></span>
+          </div>
+          <div class="meta">
+            <h3>{{ h.resort }}</h3>
+            <p>{{ h.dates_label }} · biggest day {{ h.max_day_in|floatformat:"-1" }}″</p>
+          </div>
+        </button>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section id="live">
+      <div class="sec-head">
+        <div>
+          <h2>Live stakes</h2>
+          <div class="sub">Latest frame from every stake cam, with the model's current reading. Open a cam for its timelapses and season chart.</div>
+        </div>
+      </div>
+      <div class="stakes">
+        {% for s in stakes %}
+        <a class="stake{% if not s.live %} off{% endif %}" href="/resort/{{ s.prefix }}/">
+          <div class="thumb">
+            {% if s.display_url %}<img src="{{ s.display_url }}" alt="{{ s.resort }} snow stake" loading="lazy">{% endif %}
+            {% if s.display_note %}<span class="note-tag">{{ s.display_note }}</span>{% endif %}
+            {% if s.live %}<span class="live-tag"><i></i>LIVE</span>{% endif %}
+          </div>
+          <div class="row">
+            <b>{{ s.resort }}</b>
+            {% if s.live %}<span class="reading">{{ s.reading|floatformat:"-1" }}″<small>{{ s.reading_label }}</small></span>
+            {% else %}<span class="off-label">cam offline</span>{% endif %}
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>SnowHackers · stake cams captured every 5 minutes; storm clips rebuilt nightly{% if generated_at %} (last {{ generated_at|slice:":10" }}){% endif %}</span>
+      <span><a href="/snowcams/accuracy/">How accurate is the model?</a> · <a href="/map/">SNOTEL map</a> · <a href="/tables/">Station tables</a></span>
+    </div>
+  </footer>
+
+  <dialog id="player" aria-label="Storm timelapse">
+    <video id="player-video" controls playsinline muted></video>
+    <div class="bar"><span id="player-title"></span><span><a id="player-link" href="#">Open this cam →</a>&nbsp;&nbsp;<button class="x" id="player-close" aria-label="Close">×</button></span></div>
+  </dialog>
+
+  <script>
+    (function () {
+      const dlg = document.getElementById('player');
+      const vid = document.getElementById('player-video');
+      function open(src, title, prefix) {
+        vid.src = src; vid.currentTime = 0;
+        document.getElementById('player-title').textContent = title;
+        document.getElementById('player-link').href = '/resort/' + prefix + '/';
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+        vid.play().catch(() => {});
+      }
+      function close() { vid.pause(); vid.removeAttribute('src'); vid.load(); dlg.close ? dlg.close() : dlg.removeAttribute('open'); }
+      document.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', e => {
+        e.preventDefault(); open(el.dataset.open, el.dataset.title, el.dataset.resort);
+      }));
+      document.getElementById('player-close').addEventListener('click', close);
+      dlg.addEventListener('click', e => { if (e.target === dlg) close(); });
+      dlg.addEventListener('close', () => { vid.pause(); });
+
+      // Hover preview: only fetch a clip while the pointer rests on its card (desktop only).
+      const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (canHover && !reduce) {
+        document.querySelectorAll('.card[data-video]').forEach(card => {
+          let timer, v;
+          card.addEventListener('mouseenter', () => {
+            timer = setTimeout(() => {
+              v = document.createElement('video');
+              Object.assign(v, { src: card.dataset.video, muted: true, loop: true, playsInline: true, autoplay: true });
+              card.querySelector('.thumb').appendChild(v);
+            }, 220);
+          });
+          card.addEventListener('mouseleave', () => { clearTimeout(timer); if (v) { v.pause(); v.remove(); v = null; } });
+        });
+      }
+
+      // Season filter
+      document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
+        document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip));
+        const s = chip.dataset.season;
+        document.querySelectorAll('.card[data-season]').forEach(card => {
+          card.hidden = !(s === 'all' || card.dataset.season === s);
+        });
+      }));
+    })();
+  </script>
+</body>
+</html>

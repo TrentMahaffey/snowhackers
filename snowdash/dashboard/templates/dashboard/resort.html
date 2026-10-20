@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ stake.resort }} Snow Stake Cam — SnowHackers</title>
+  <meta name="description" content="Live snow stake cam, timelapses and storm history for {{ stake.resort }}.">
+  <link rel="icon" type="image/svg+xml" href="/static/dashboard/favicon.svg">
+  <link rel="stylesheet" href="/static/dashboard/showcase.css?v=3">
+  <style>
+    /* chart colors: reference palette dark slots 1+2, validated on #111b2d (all checks pass) */
+    :root { --s-model: #3987e5; --s-reported: #d95926; --s-snotel: #199e70; }
+    .crumbs { color: var(--muted); font-size: 14px; padding-top: 22px; }
+    .crumbs a { color: var(--muted); }
+    .title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin: 4px 0 18px; }
+    .title h1 { margin: 0; font-size: clamp(28px, 4vw, 42px); }
+    .status { color: var(--muted); font-size: 15px; }
+    .status b { color: var(--text); font-variant-numeric: tabular-nums; }
+    .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+    @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .panel h2 { font-size: 15px; font-weight: 650; margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .frame img, .frame video { display: block; width: 100%; aspect-ratio: 16/9; object-fit: contain; background: #000; }
+    .frame.off img { filter: grayscale(1) brightness(.6); }
+    .tabs { display: flex; gap: 4px; }
+    .tab { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 8px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+    .tab.on { color: var(--text); border-color: var(--ice-strong); background: var(--panel-2); }
+    .empty { padding: 40px 16px; color: var(--muted); text-align: center; }
+
+    .chart-wrap { padding: 12px 14px 14px; }
+    .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    .legend i { display: inline-block; vertical-align: -1px; margin-right: 6px; }
+    .legend .bar { width: 8px; height: 12px; border-radius: 2px 2px 0 0; background: var(--s-model); }
+    .legend .pt { width: 9px; height: 9px; border-radius: 50%; background: var(--s-reported); box-shadow: 0 0 0 2px var(--panel); }
+    .legend .dia { width: 8px; height: 8px; background: var(--s-snotel); transform: rotate(45deg); margin-right: 8px; }
+    .chart-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+    #chart { position: relative; }
+    #chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .tip { position: absolute; pointer-events: none; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+      padding: 7px 10px; font-size: 13px; white-space: nowrap; transform: translate(-50%, -100%); margin-top: -10px; display: none; }
+    .tip b { display: block; margin-bottom: 2px; }
+    .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+    details { margin-top: 10px; color: var(--muted); font-size: 13px; }
+    details table { border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+    details td, details th { padding: 3px 14px 3px 0; text-align: left; }
+    details th { color: var(--faint); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/">❄ Snow<span>Hackers</span></a>
+      <nav>
+        <a href="/">Storms</a>
+        <a href="/forecast/">Forecast</a>
+        <a href="/snowcams/">All timelapses</a>
+        <a href="/map/">SNOTEL map</a>
+        <a href="/snowcams/search/">Image search</a>
+        <a href="/snowcams/accuracy/">Model accuracy</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="crumbs"><a href="/">Storms</a> / <a href="/#live">Live stakes</a></div>
+    <div class="title">
+      <h1>{{ stake.resort }}</h1>
+      <div class="status">
+        {% if stake.live %}<i class="dot"></i><b>{{ stake.reading|floatformat:"-1" }}″</b> {{ stake.reading_label }} · frame {{ stake.age_h|floatformat:"0" }}h ago
+        {% else %}Cam offline{% if stake.captured_at %} · last frame {{ stake.captured_at|slice:":10" }}{% endif %}{% endif %}
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="panel">
+        <h2>{% if stake.display_note %}Last daylight frame <span class="sub">it's night at the stake now</span>{% else %}Latest frame{% endif %}</h2>
+        <div class="frame{% if not stake.live %} off{% endif %}">
+          {% if stake.display_url %}<img src="{{ stake.display_url }}" alt="{{ stake.resort }} snow stake">
+          {% else %}<div class="empty">No frame yet.</div>{% endif %}
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Timelapse
+          {% if timelapses %}<span class="tabs" role="tablist">
+            {% for t in timelapses %}<button class="tab{% if forloop.first %} on{% endif %}" role="tab" data-src="{{ t.url }}">{{ t.label }}</button>{% endfor %}
+          </span>{% endif %}
+        </h2>
+        <div class="frame">
+          {% if timelapses %}<video id="tl" controls muted playsinline preload="metadata" src="{{ timelapses.0.url }}"></video>
+          {% else %}<div class="empty">No timelapse yet — videos are built every morning.</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if highlights %}
+    <section>
+      <div class="sec-head"><div><h2>Storms at {{ stake.resort }}</h2><div class="sub">Click to watch.</div></div></div>
+      <div class="grid">
+        {% for h in highlights %}
+        <button class="card" data-open="{{ h.video }}" data-title="{{ h.resort }} · {{ h.dates_label }}" data-resort="{{ h.prefix }}">
+          <div class="thumb">
+            <img src="{{ h.poster }}" alt="{{ h.resort }} storm" loading="lazy">
+            <span class="badge">{{ h.storm_total_in|floatformat:"-1" }}″<small>storm</small></span>
+          </div>
+          <div class="meta"><h3>{{ h.dates_label }}</h3><p>biggest day {{ h.max_day_in|floatformat:"-1" }}″ · {{ h.days }} day{{ h.days|pluralize }}</p></div>
+        </button>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if fc %}
+    <section>
+      <div class="panel">
+        <h2>Snow forecast · next 7 days <a class="sub" href="/forecast/#{{ fc_zone.id }}">{{ fc_zone.name }} →</a></h2>
+        <div class="chart-wrap">
+          <div class="fc-row">
+            <div><div class="fc-num">{{ fc.r24 }}</div><div class="sub">next 24 h</div></div>
+            <div><div class="fc-num">{{ fc.r72 }}</div><div class="sub">72 h</div></div>
+            <div><div class="fc-num">{{ fc.r7d }}</div><div class="sub">7 days · {{ fc.confidence }} confidence</div></div>
+          </div>
+          <p class="chart-note"><b>{{ fc_zone.text.headline }}</b> — {{ fc_zone.text.discussion }}</p>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    <section>
+      <div class="panel">
+        <h2>Daily new snow · {{ chart_season }} season</h2>
+        <div class="chart-wrap">
+          <div class="legend">
+            <span><i class="bar"></i>Stake cam (vision model)</span>
+            <span><i class="pt"></i>Resort-reported 24h</span>
+            {% if snotel_station %}<span><i class="dia"></i>SNOTEL depth gain · {{ snotel_station }}</span>{% endif %}
+          </div>
+          <div id="chart"><div class="tip" id="tip"></div></div>
+          {% if sherpa %}<p class="chart-note">This cam is a Sherpa bar: the model reports which rung is buried (2, 6, 10, 14, 18″), so its bars are rung steps — a 2″ bar means 2–6″ fell. It tends to under-read deep days; compare with SNOTEL.</p>{% endif %}
+          <details>
+            <summary>Show as table</summary>
+            <table id="chart-table"><thead><tr><th>Date</th><th>Stake cam</th><th>Resort report</th><th>SNOTEL</th></tr></thead><tbody></tbody></table>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>New snow per day = the persistent rise in the model's stake reading (≥ ~3 hours), so one-frame glitches don't count.</span>
+      <span><a href="/snowcams/accuracy/">Model accuracy</a></span>
+    </div>
+  </footer>
+
+  <dialog id="player" aria-label="Storm timelapse">
+    <video id="player-video" controls playsinline muted></video>
+    <div class="bar"><span id="player-title"></span><button class="x" id="player-close" aria-label="Close">×</button></div>
+  </dialog>
+
+  {{ chart_data|json_script:"chart-data" }}
+  <script>
+  (function () {
+    // timelapse tabs
+    const tl = document.getElementById('tl');
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+      tl.src = t.dataset.src; tl.play().catch(() => {});
+    }));
+
+    // storm player
+    const dlg = document.getElementById('player'), pv = document.getElementById('player-video');
+    document.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => {
+      pv.src = el.dataset.open; document.getElementById('player-title').textContent = el.dataset.title;
+      dlg.showModal ? dlg.showModal() : dlg.setAttribute('open', ''); pv.play().catch(() => {});
+    }));
+    const closeP = () => { pv.pause(); pv.removeAttribute('src'); pv.load(); dlg.close ? dlg.close() : dlg.removeAttribute('open'); };
+    document.getElementById('player-close').addEventListener('click', closeP);
+    dlg.addEventListener('click', e => { if (e.target === dlg) closeP(); });
+
+    // season chart: one bar per day (model), one dot per day with a same-day resort report
+    const data = JSON.parse(document.getElementById('chart-data').textContent);
+    const box = document.getElementById('chart'), tip = document.getElementById('tip');
+    const reported = Object.fromEntries(data.reported);
+    const snotel = Object.fromEntries(data.snotel || []);
+    const RUNGS = [2, 6, 10, 14, 18, 22];
+    const camLabel = v => {
+      if (!data.sherpa || v <= 0) return v + '″';
+      const i = RUNGS.indexOf(v);
+      return i >= 0 && i < RUNGS.length - 1 ? `${v}–${RUNGS[i + 1]}″` : v + '″+';
+    };
+    const days = data.model;
+    const tbody = document.querySelector('#chart-table tbody');
+    if (!days.length) { box.insertAdjacentHTML('beforeend', '<div class="empty">No readings for this cam yet.</div>'); return; }
+
+    // draw at the container's real width so 11px labels stay 11px on phones
+    const W = Math.max(300, Math.round(box.clientWidth)), H = W < 600 ? 200 : 260, L = 34, R = 8, T = 10, B = 26;
+    const maxV = Math.max(4, ...days.map(d => d[1]), ...data.reported.map(d => d[1]), ...(data.snotel || []).map(d => d[1]));
+    const yMax = Math.ceil(maxV / 4) * 4;
+    const n = days.length, slot = (W - L - R) / n;
+    const x = i => L + i * slot, y = v => T + (H - T - B) * (1 - v / yMax);
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Daily new snow from the stake cam, with resort-reported 24 hour totals');
+    const mk = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+
+    // recessive grid + y labels
+    for (let v = 0; v <= yMax; v += yMax / 4) {
+      mk('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: '#22324d', 'stroke-width': 1 });
+      const t = mk('text', { x: L - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#5f7190' }); t.textContent = v + '″';
+    }
+    // month ticks
+    let lastMonth = '';
+    days.forEach((d, i) => {
+      const m = d[0].slice(0, 7);
+      if (m !== lastMonth) {
+        lastMonth = m;
+        const t = mk('text', { x: x(i) + 2, y: H - 8, 'font-size': 11, fill: '#5f7190' });
+        t.textContent = new Date(d[0] + 'T12:00').toLocaleString('en-US', { month: 'short' });
+      }
+    });
+    // bars: thin, rounded data-end, anchored at baseline, 2px gap between neighbours
+    const bw = Math.max(1, slot - 2), rr = Math.min(4, bw / 2);
+    days.forEach((d, i) => {
+      if (d[1] <= 0) return;
+      const top = y(d[1]), base = y(0), x0 = x(i) + 1;
+      mk('path', { d: `M${x0},${base} V${top + rr} Q${x0},${top} ${x0 + rr},${top} H${x0 + bw - rr} Q${x0 + bw},${top} ${x0 + bw},${top + rr} V${base} Z`, fill: 'var(--s-model)' });
+    });
+    // SNOTEL diamonds (shape differs from the resort-report circles: identity isn't color-only)
+    days.forEach((d, i) => {
+      const v = snotel[d[0]];
+      if (v === undefined) return;
+      const cx = x(i) + slot / 2, cy = y(v), r = 5;
+      mk('path', { d: `M${cx},${cy - r} L${cx + r},${cy} L${cx},${cy + r} L${cx - r},${cy} Z`, fill: 'var(--s-snotel)', stroke: '#111b2d', 'stroke-width': 2 });
+    });
+    // reported dots with a 2px surface ring
+    days.forEach((d, i) => {
+      const r = reported[d[0]];
+      if (r === undefined) return;
+      mk('circle', { cx: x(i) + slot / 2, cy: y(r), r: 4.5, fill: 'var(--s-reported)', stroke: '#111b2d', 'stroke-width': 2 });
+    });
+    mk('line', { x1: L, x2: W - R, y1: y(0), y2: y(0), stroke: '#3a4d6e', 'stroke-width': 1 });
+
+    // hover: full-height hit target per day, larger than the mark
+    const hl = mk('rect', { x: 0, y: T, width: slot, height: H - T - B, fill: '#ffffff', opacity: 0, 'pointer-events': 'none' });
+    days.forEach((d, i) => {
+      const hit = mk('rect', { x: x(i), y: T, width: slot, height: H - T - B, fill: 'transparent' });
+      hit.addEventListener('mouseenter', () => {
+        hl.setAttribute('x', x(i)); hl.setAttribute('opacity', 0.06);
+        const r = reported[d[0]];
+        tip.innerHTML = `<b>${new Date(d[0] + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</b>`
+          + `<i style="background:var(--s-model)"></i>Stake cam ${camLabel(d[1])}`
+          + (r !== undefined ? `<br><i style="background:var(--s-reported);border-radius:50%"></i>Resort report ${r}″` : '')
+          + (snotel[d[0]] !== undefined ? `<br><i style="background:var(--s-snotel);transform:rotate(45deg)"></i>SNOTEL ${snotel[d[0]]}″` : '');
+        const bb = svg.getBoundingClientRect(), scale = bb.width / W;
+        tip.style.left = ((x(i) + slot / 2) * scale) + 'px';
+        tip.style.top = (y(Math.max(d[1], r || 0, snotel[d[0]] || 0)) * scale) + 'px';
+        tip.style.display = 'block';
+      });
+    });
+    svg.addEventListener('mouseleave', () => { tip.style.display = 'none'; hl.setAttribute('opacity', 0); });
+    box.prepend(svg);
+
+    // table view: snowy days only
+    days.filter(d => d[1] > 0 || reported[d[0]] > 0 || snotel[d[0]] > 0).forEach(d => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${d[0]}</td><td>${d[1] > 0 ? camLabel(d[1]) : '—'}</td><td>${reported[d[0]] !== undefined ? reported[d[0]] + '″' : '—'}</td>`
+        + `<td>${snotel[d[0]] !== undefined ? snotel[d[0]] + '″' : '—'}</td>`;
+      tbody.appendChild(tr);
+    });
+    if (!tbody.children.length) tbody.innerHTML = '<tr><td colspan="4">No snow days yet.</td></tr>';
+  })();
+  </script>
+</body>
+</html>

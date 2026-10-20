@@ -79,3 +79,7 @@ CACHES = {
 
 # Cache timeout for query results (5 minutes)
 QUERY_CACHE_TIMEOUT = 300
+
+# OpenStreetMap tile servers block requests without a Referer; Django's default
+# (same-origin) strips it from cross-origin tile loads. (2026-10-10)
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"

@@ -138,6 +138,73 @@
       width: 40px; height: 40px;
       display: flex; align-items: center; justify-content: center;
     }
+    /* depth grid */
+    .section-title {
+      font-size: 18px; font-weight: 600; margin: 0 0 4px 0; color: var(--text);
+    }
+    .section-sub {
+      font-size: 13px; color: var(--text-muted); margin: 0 0 14px 0;
+    }
+    .grid-card {
+      background: var(--card-bg); border-radius: 12px; box-shadow: var(--shadow);
+      padding: 16px; margin-bottom: 24px;
+    }
+    .depth-row {
+      display: grid;
+      grid-template-columns: 160px repeat(4, 1fr);
+      gap: 10px;
+      align-items: center;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+    }
+    .depth-row:first-of-type { border-top: none; }
+    .depth-row .resort-name {
+      font-weight: 600; font-size: 14px;
+    }
+    .depth-row .resort-name .count {
+      display: block; font-size: 11px; font-weight: 400; color: var(--text-muted);
+    }
+    .depth-cell {
+      position: relative; aspect-ratio: 4/3; background: #000;
+      border-radius: 6px; overflow: hidden; cursor: pointer;
+    }
+    .depth-cell img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .depth-cell.empty {
+      background: #f0f0f0; cursor: default;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); font-size: 11px; text-align: center; padding: 4px;
+    }
+    .depth-cell .cell-overlay {
+      position: absolute; top: 4px; right: 4px;
+      padding: 2px 6px; border-radius: 4px;
+      font-size: 11px; font-weight: 700; color: white;
+      background: rgba(0,0,0,0.7);
+    }
+    .depth-cell .cell-target {
+      position: absolute; bottom: 4px; left: 4px;
+      padding: 2px 6px; border-radius: 4px;
+      font-size: 10px; font-weight: 600; color: white;
+      background: var(--primary);
+    }
+    .depth-cell.is-label .cell-overlay { background: rgba(28, 157, 74, 0.85); }
+    .depth-cell.is-label .cell-target  { background: rgba(28, 157, 74, 0.85); }
+    .depth-headers {
+      display: grid;
+      grid-template-columns: 160px repeat(4, 1fr);
+      gap: 10px;
+      padding: 0 0 8px 0;
+      font-size: 12px; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .depth-headers .target-col { text-align: center; }
+    @media (max-width: 720px) {
+      .depth-row, .depth-headers {
+        grid-template-columns: 90px repeat(4, 1fr);
+      }
+      .depth-row .resort-name { font-size: 12px; }
+    }
   </style>
 </head>
 <body>
@@ -146,8 +213,11 @@
     <p>Every captured image and the snow depth our fine-tuned Qwen2.5-VL model predicted.</p>
     <div class="nav-links">
       <a href="/snowcams/" class="nav-link">&laquo; Timelapses</a>
-      <a href="/snowcams/search/" class="nav-link">Advanced Search</a>
-      <a href="/" class="nav-link">Home</a>
+      <a href="/snowcams/search/" class="nav-link">🔍 Advanced Search</a>
+      <a href="/snowcams/accuracy/" class="nav-link">🎯 Model Accuracy</a>
+      <a href="/" class="nav-link">Storms</a>
+      <a href="/map/" class="nav-link">Map</a>
+      <a href="/tables/" class="nav-link">Dashboard</a>
       <select id="resort-select" class="resort-select" onchange="onResortChange()">
         <option value="">All resorts</option>
       </select>
@@ -155,6 +225,27 @@
   </div>
 
   <div class="container">
+    <div class="grid-card" id="depth-grid-card">
+      <h2 class="section-title">Depth Calibration Grid</h2>
+      <p class="section-sub">
+        For each resort, the model prediction closest to 3″, 6″, 9″, and 12″
+        (within ±1.5″). <span style="color: var(--primary); font-weight: 600;">Blue</span>
+        badges = model prediction; <span style="color: var(--badge-high); font-weight: 600;">green</span>
+        = hand-labeled training image (fallback when no model prediction exists in range).
+      </p>
+      <div class="depth-headers">
+        <div></div>
+        <div class="target-col">~3″</div>
+        <div class="target-col">~6″</div>
+        <div class="target-col">~9″</div>
+        <div class="target-col">~12″</div>
+      </div>
+      <div id="depth-grid-body">
+        <div class="empty" style="padding: 24px;">Loading…</div>
+      </div>
+    </div>
+
+    <h2 class="section-title">All Predictions</h2>
     <div class="stats" id="stats">Loading…</div>
     <div id="feed-container">
       <div class="empty">Loading predictions…</div>
@@ -320,8 +411,79 @@
       if (e.key === "Escape") closeLightbox(null, true);
     });
 
+    async function loadDepthGrid() {
+      const body = document.getElementById("depth-grid-body");
+      try {
+        const r = await fetch("/api/snowcam_depth_grid");
+        if (!r.ok) {
+          body.innerHTML = '<div class="empty" style="padding:24px;">HTTP ' + r.status + ' from /api/snowcam_depth_grid</div>';
+          return;
+        }
+        const data = await r.json();
+        if (!data.resorts || !data.resorts.length) {
+          body.innerHTML = '<div class="empty" style="padding:24px;">No model predictions on record yet.</div>';
+          return;
+        }
+        const frag = document.createDocumentFragment();
+        for (const resort of data.resorts) {
+          const row = document.createElement("div");
+          row.className = "depth-row";
+          const nameEl = document.createElement("div");
+          nameEl.className = "resort-name";
+          const total = (resort.total_predictions || 0).toLocaleString();
+          const plural = resort.total_predictions === 1 ? "" : "s";
+          nameEl.innerHTML = (resort.label || resort.prefix || "?") +
+            '<span class="count">' + total + " pred" + plural + "</span>";
+          row.appendChild(nameEl);
+          for (const sample of (resort.samples || [])) {
+            const cell = document.createElement("div");
+            if (!sample.match) {
+              cell.className = "depth-cell empty";
+              cell.textContent = "no match";
+            } else {
+              cell.className = "depth-cell";
+              const m = sample.match;
+              if (m.source === "label") cell.classList.add("is-label");
+              const img = document.createElement("img");
+              img.loading = "lazy";
+              img.src = m.image_url;
+              img.alt = (resort.label || "") + " " + m.depth_inches + " in";
+              const tgt = document.createElement("div");
+              tgt.className = "cell-target";
+              tgt.textContent = sample.target + '" target';
+              const ovr = document.createElement("div");
+              ovr.className = "cell-overlay";
+              ovr.textContent = m.depth_inches + '"';
+              cell.appendChild(img);
+              cell.appendChild(tgt);
+              cell.appendChild(ovr);
+              cell.addEventListener("click", function () {
+                openLightbox({
+                  image_url: m.image_url,
+                  depth_inches: m.depth_inches,
+                  resort_label: resort.label,
+                  ts: m.ts,
+                  confidence: m.confidence,
+                  source: "model",
+                });
+              });
+            }
+            row.appendChild(cell);
+          }
+          frag.appendChild(row);
+        }
+        body.innerHTML = "";
+        body.appendChild(frag);
+      } catch (e) {
+        body.innerHTML = '<div class="empty" style="padding:24px;color:#c00;">Error: ' +
+          (e && e.message ? e.message : e) + '</div>';
+        console.error("loadDepthGrid failed:", e);
+      }
+    }
+
     (async () => {
       await loadResorts();
+      loadDepthGrid();
       load(1);
     })();
   </script>

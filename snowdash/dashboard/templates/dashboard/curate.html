@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Curate storms — SnowHackers</title>
+  <link rel="stylesheet" href="/static/dashboard/showcase.css?v=3">
+  <style>
+    .keybar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 22px 0 6px; }
+    .keybar input { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 8px 10px; min-width: 0; width: 280px; max-width: 100%; }
+    .note { color: var(--muted); font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    .tw { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+    td, th { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; font-size: 14px; }
+    th { color: var(--faint); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    td img { width: 120px; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; display: block; }
+    .num { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .act { display: flex; gap: 6px; flex-wrap: wrap; }
+    .act button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+    .act button.warn { color: #ffb4a3; }
+    .state { font-size: 12px; font-weight: 700; }
+    .state.pinned { color: var(--amber); }
+    .state.hidden { color: var(--faint); }
+    #flash { min-height: 20px; font-size: 14px; color: var(--ice); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/">❄ Snow<span>Hackers</span></a>
+      <nav><a href="/">Storms</a><a class="on" href="/curate/">Curate</a></nav>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="keybar">
+      <input id="key" type="password" placeholder="Curation key" autocomplete="off" aria-label="Curation key">
+      <button class="btn" id="savekey">Remember key</button>
+      <span class="note">Pin = feature it first on the homepage. Hide = never show it. Changes to on-site clips apply immediately; newly pinned storms render on the next nightly run.</span>
+    </div>
+    <div id="flash" role="status"></div>
+    {% csrf_token %}
+
+    <section>
+      <h2>On the site ({{ selected|length }})</h2>
+      <div class="tw"><table>
+        <thead><tr><th></th><th>Storm</th><th>Total</th><th>State</th><th></th></tr></thead>
+        <tbody>
+        {% for h in selected %}
+          <tr data-id="{{ h.id }}">
+            <td><img src="{{ h.poster }}" alt="" loading="lazy"></td>
+            <td><b>{{ h.resort }}</b><br><span class="note">{{ h.dates_label }} · {{ h.season }}</span></td>
+            <td class="num">{{ h.storm_total_in|floatformat:"-1" }}″</td>
+            <td><span class="state{% if h.pinned %} pinned{% elif h.hidden %} hidden{% endif %}">{% if h.pinned %}PINNED{% elif h.hidden %}HIDDEN{% else %}auto{% endif %}</span></td>
+            <td class="act">
+              {% if h.pinned %}<button data-a="unpin">Unpin</button>{% else %}<button data-a="pin">Pin</button>{% endif %}
+              {% if h.hidden %}<button data-a="unhide">Unhide</button>{% else %}<button class="warn" data-a="hide">Hide</button>{% endif %}
+              <a class="note" href="{{ h.video }}" target="_blank" rel="noopener">play</a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+
+    {% if hidden %}
+    <section>
+      <h2>Hidden ({{ hidden|length }})</h2>
+      <div class="tw"><table><tbody>
+        {% for c in hidden %}
+          <tr data-id="{{ c.id }}"><td><b>{{ c.resort }}</b><br><span class="note">{{ c.dates_label }}</span></td>
+            <td class="num">{{ c.storm_total_in|floatformat:"-1" }}″</td>
+            <td class="act"><button data-a="unhide">Unhide</button></td></tr>
+        {% endfor %}
+      </tbody></table></div>
+    </section>
+    {% endif %}
+
+    <section>
+      <h2>Other storms the scorer found</h2>
+      <div class="sub" style="margin-bottom:10px">Not rendered yet. Pin one to add it — it renders tonight.{% if pinned_pending %} Pending render: {{ pinned_pending|length }}.{% endif %}</div>
+      <div class="tw"><table><tbody>
+        {% for c in others %}
+          <tr data-id="{{ c.id }}"><td><b>{{ c.resort }}</b><br><span class="note">{{ c.dates_label }} · {{ c.season }} · biggest day {{ c.max_day_in|floatformat:"-1" }}″</span></td>
+            <td class="num">{{ c.storm_total_in|floatformat:"-1" }}″</td>
+            <td class="act">{% if c.id in pinned_pending %}<span class="state pinned">PINNED · renders tonight</span>{% else %}<button data-a="pin">Pin</button>{% endif %}</td></tr>
+        {% empty %}
+          <tr><td class="note">Nothing else yet.</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+    </section>
+  </main>
+
+  <script>
+  (function () {
+    const keyEl = document.getElementById('key'), flash = document.getElementById('flash');
+    try { keyEl.value = localStorage.getItem('snowhackers_curate_key') || ''; } catch (e) {}
+    document.getElementById('savekey').addEventListener('click', () => {
+      try { localStorage.setItem('snowhackers_curate_key', keyEl.value); flash.textContent = 'Key saved in this browser.'; } catch (e) {}
+    });
+    const csrf = document.querySelector('input[name=csrfmiddlewaretoken]').value;
+    document.querySelectorAll('button[data-a]').forEach(b => b.addEventListener('click', async () => {
+      const id = b.closest('tr').dataset.id;
+      b.disabled = true;
+      try {
+        const r = await fetch('/api/curate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+          body: JSON.stringify({ id, action: b.dataset.a, key: keyEl.value }),
+        });
+        const j = await r.json();
+        if (!r.ok) { flash.textContent = 'Not saved: ' + (j.error || r.status); b.disabled = false; return; }
+        flash.textContent = `Saved: ${b.dataset.a} ${id}`;
+        setTimeout(() => location.reload(), 500);
+      } catch (e) { flash.textContent = 'Network error'; b.disabled = false; }
+    }));
+  })();
+  </script>
+</body>
+</html>

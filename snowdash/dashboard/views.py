@@ -126,11 +126,18 @@ def index(request):
             cur.execute("SELECT COUNT(*) AS stations FROM public.snotel_station;")
             stations = _fetchall_dict(cur)[0]["stations"]
 
-            cur.execute("SELECT COUNT(*) AS hourly_obs FROM public.snotel_hourly_obs;")
-            hourly_obs = _fetchall_dict(cur)[0]["hourly_obs"]
-
-            cur.execute("SELECT COUNT(*) AS forecast_rows FROM public.forecast_hourly;")
-            forecast_rows = _fetchall_dict(cur)[0]["forecast_rows"]
+            # Use Postgres planner's row estimate for the huge tables — exact
+            # COUNT(*) on the 25GB forecast_hourly table takes minutes and
+            # hangs gunicorn workers. The estimate is good enough for a
+            # dashboard tile.
+            cur.execute("""
+                SELECT relname, reltuples::bigint AS estimate
+                FROM pg_class
+                WHERE relname IN ('snotel_hourly_obs', 'forecast_hourly')
+            """)
+            est = {r["relname"]: r["estimate"] for r in _fetchall_dict(cur)}
+            hourly_obs = est.get("snotel_hourly_obs", 0)
+            forecast_rows = est.get("forecast_hourly", 0)
 
             counts = {"stations": stations, "hourly_obs": hourly_obs, "forecast_rows": forecast_rows}
         cache.set("dashboard_counts", counts, 300)  # Cache for 5 minutes
@@ -578,6 +585,8 @@ def api_regional_observed(request):
 # Snow Cam Views
 from pathlib import Path
 from datetime import datetime
+from datetime import timezone
+from datetime import timedelta
 
 def snowcams(request):
     """Snow cam timelapses viewer"""
@@ -609,6 +618,10 @@ def api_snowcam_videos(request):
         "Keystone": "keystone_snowstake",
         "Loveland": "loveland",
         "Monarch": "monarch",
+        "Purgatory": "purgatory_snowstake",
+        "Ski Cooper": "skicooper_stake",
+        "Wolf Creek": "wolfcreek_summit",
+        "Taos": "taos_poco",
         "Powderhorn": "powderhorn",
         "Steamboat": "steamboat_snowstake",
         "Sunlight": "sunlight_snapshot",
@@ -623,8 +636,11 @@ def api_snowcam_videos(request):
         "Brian Head": "brian_head",
         "Cherry Peak": "cherry_peak",
         "Powder Mountain": "powder_mountain",
+        "Deer Valley": "deer_valley",
+        "Snowbasin": "snowbasin",
         # Montana / Wyoming / Idaho
         "Big Sky": "bigsky_andesite",
+        "Big Sky Headwaters": "bigsky_headwaters",
         "Bridger Bowl": "bridgerbowl_redchair",
         "Discovery": "discovery_snowstake",
         "Grand Targhee": "grandtarghee",
@@ -721,12 +737,14 @@ SNOWCAM_PREFIX_TO_RESORT = {
     "aspen": "Aspen Mountain",
     "beavercreek_snowstake": "Beaver Creek",
     "bigsky_andesite": "Big Sky",
+    "bigsky_headwaters": "Big Sky Headwaters",
     "boreal": "Boreal",
     "breckenridge_snowstake": "Breckenridge",
     "bridgerbowl_redchair": "Bridger Bowl",
     "brian_head": "Brian Head",
     "buttermilk": "Buttermilk",
     "cherry_peak": "Cherry Peak",
+    "deer_valley": "Deer Valley",
     "copper": "Copper",
     "crestedbutte_pow": "Crested Butte",
     "discovery_snowstake": "Discovery",
@@ -737,11 +755,16 @@ SNOWCAM_PREFIX_TO_RESORT = {
     "kirkwood": "Kirkwood",
     "loveland": "Loveland",
     "monarch": "Monarch",
+    "purgatory_snowstake": "Purgatory",
+    "skicooper_stake": "Ski Cooper",
+    "wolfcreek_summit": "Wolf Creek",
+    "taos_poco": "Taos",
     "northstar": "Northstar",
     "park_city": "Park City",
     "powder_mountain": "Powder Mountain",
     "powderhorn": "Powderhorn",
     "snowbird_snowstake": "Snowbird",
+    "snowbasin": "Snowbasin",
     "snowmass": "Snowmass",
     "steamboat_snowstake": "Steamboat",
     "sundance": "Sundance",
@@ -965,3 +988,489 @@ def api_snowcam_images(request):
         "pages": (total + per_page - 1) // per_page,
         "source_file": source,
     })
+
+
+def api_snowcam_depth_grid(request):
+    """For each resort, find the prediction closest to each target depth.
+
+    Targets default to 3", 6", 9", 12". For each resort × target we pick the
+    single closest match within tolerance. Model predictions (source=model)
+    are preferred; if no model prediction exists within tolerance for a given
+    target, we fall back to hand-labeled training images (source=label) so
+    newly-onboarded cams without seasonal predictions still have something to
+    show.
+
+    Query params:
+      targets:   comma-separated list of target inches (default "3,6,9,12")
+      tolerance: max distance from target in inches (default 1.5)
+    """
+    from django.http import JsonResponse
+
+    targets_raw = request.GET.get("targets", "3,6,9,12")
+    try:
+        targets = [float(x) for x in targets_raw.split(",") if x.strip()]
+    except ValueError:
+        targets = [3.0, 6.0, 9.0, 12.0]
+    try:
+        tolerance = float(request.GET.get("tolerance", "1.5"))
+    except ValueError:
+        tolerance = 1.5
+
+    rows, source = _load_predictions_history()
+
+    # Group rows by resort prefix, split into model and label buckets
+    model_by_resort = {}
+    label_by_resort = {}
+    for r in rows:
+        depth = r.get("depth_inches")
+        if depth is None:
+            continue
+        prefix = r.get("prefix")
+        if not prefix:
+            continue
+        src = r.get("source")
+        if src == "model":
+            model_by_resort.setdefault(prefix, []).append(r)
+        elif src == "label":
+            label_by_resort.setdefault(prefix, []).append(r)
+
+    def _closest(rows_for_resort, target):
+        best = None
+        best_dist = tolerance
+        for r in rows_for_resort:
+            dist = abs(r["depth_inches"] - target)
+            if dist <= best_dist:
+                best = r
+                best_dist = dist
+        return best
+
+    all_prefixes = set(model_by_resort) | set(label_by_resort)
+    out_resorts = []
+    for prefix in all_prefixes:
+        model_rows = model_by_resort.get(prefix, [])
+        label_rows = label_by_resort.get(prefix, [])
+        samples = []
+        for target in targets:
+            best = _closest(model_rows, target)
+            used_source = "model"
+            if best is None:
+                best = _closest(label_rows, target)
+                used_source = "label"
+            if best is None:
+                samples.append({"target": target, "match": None})
+            else:
+                name = best.get("name") or ""
+                samples.append({
+                    "target": target,
+                    "match": {
+                        "filename": name,
+                        "image_url": f"/media/snapshots/{name}" if name else None,
+                        "ts": best.get("ts"),
+                        "depth_inches": best.get("depth_inches"),
+                        "confidence": best.get("confidence"),
+                        "source": used_source,
+                    },
+                })
+        out_resorts.append({
+            "prefix": prefix,
+            "label": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+            "samples": samples,
+            "total_predictions": len(model_rows),
+            "total_labels": len(label_rows),
+        })
+
+    out_resorts.sort(key=lambda x: x["label"])
+
+    return JsonResponse({
+        "targets": targets,
+        "tolerance": tolerance,
+        "resorts": out_resorts,
+        "source_file": source,
+    })
+
+
+def snowcam_accuracy_page(request):
+    """Accuracy demo: hand-labeled stake images vs model readings, per resort and depth.
+
+    Data is baked offline into dashboard/data/accuracy_demo.json by the
+    accuracy-demo eval (see snowhackers bin/ + snowcammeasurement/finetune).
+    """
+    import json as _json
+    path = Path(__file__).resolve().parent / "data" / "accuracy_demo.json"
+    try:
+        data = _json.loads(path.read_text())
+    except Exception:
+        data = {}
+    return render(request, "dashboard/snowcam_accuracy.html", {
+        "overall": data.get("overall", {}),
+        "test_stats": data.get("test_stats", {}),
+        "resorts": data.get("resorts", []),
+        "points_json": data.get("points", []),
+        "model_run": data.get("model_run", ""),
+        "generated_at": data.get("generated_at", ""),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Storm showcase: homepage, resort pages, curation (added 2026-10-08)
+# Highlights are produced nightly by snowhackers/bin/build_highlights.py.
+# ---------------------------------------------------------------------------
+import os
+
+_SHOWCASE_DATA = Path(__file__).resolve().parent / "data"
+_HL_CATALOG = _SHOWCASE_DATA / "highlights.json"
+_HL_OVERRIDES = _SHOWCASE_DATA / "highlight_overrides.json"
+_CURATE_KEY_FILE = _SHOWCASE_DATA / "curate_key.txt"
+_PREDICTIONS_FILE = Path("/snowcam-predictions/cam_predictions.json")
+_TIMELAPSE_DIRS = (
+    ("24h", "24 Hour", Path("/snowcam-timelapses"), "/media/snowcams/"),
+    ("7d", "7 Day", Path("/snowcam-timelapses7"), "/media/snowcams7/"),
+    ("30d", "30 Day", Path("/snowcam-timelapses30"), "/media/snowcams30/"),
+)
+_LIVE_MAX_AGE_H = 6
+
+
+def _read_json(path, default):
+    import json as _json
+    try:
+        return _json.loads(Path(path).read_text())
+    except Exception:
+        return default
+
+
+def _current_season():
+    today = datetime.now().date()
+    y = today.year if today.month >= 8 else today.year - 1
+    return f"{y}-{str(y + 1)[2:]}"
+
+
+def _dates_label(start, end):
+    """'Dec 24, 2025' / 'Dec 24–25, 2025' / 'Dec 30, 2025 – Jan 2, 2026'"""
+    from datetime import date as _date
+    a, b = _date.fromisoformat(start), _date.fromisoformat(end)
+    if a == b:
+        return f"{a:%b} {a.day}, {a.year}"
+    if (a.year, a.month) == (b.year, b.month):
+        return f"{a:%b} {a.day}\u2013{b.day}, {a.year}"
+    if a.year == b.year:
+        return f"{a:%b} {a.day} \u2013 {b:%b} {b.day}, {a.year}"
+    return f"{a:%b} {a.day}, {a.year} \u2013 {b:%b} {b.day}, {b.year}"
+
+
+def _highlights():
+    """Visible highlights (hidden removed), pinned first, then biggest storm."""
+    catalog = _read_json(_HL_CATALOG, {})
+    overrides = _read_json(_HL_OVERRIDES, {})
+    items = []
+    for h in catalog.get("highlights", []):
+        o = overrides.get(h["id"], {})
+        if o.get("hidden"):
+            continue
+        items.append({**h, "pinned": bool(o.get("pinned")), "dates_label": _dates_label(h["start"], h["end"])})
+    items.sort(key=lambda h: (not h["pinned"], -h["storm_total_in"]))
+    return items, catalog
+
+
+_DAYLIGHT_CACHE = {"mtime": None, "frames": {}}
+
+
+def _latest_daylight_frames():
+    """{prefix: [(captured_at_utc_text, image_name), ...]} newest daylight (9am-4pm local) frames first."""
+    from zoneinfo import ZoneInfo
+    path = Path("/snowcam-predictions/cam_predictions_history.json")
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return {}
+    if _DAYLIGHT_CACHE["mtime"] == mtime:
+        return _DAYLIGHT_CACHE["frames"]
+    local = ZoneInfo("America/Denver")
+    best = {}
+    for r in _read_json(path, []):
+        ts, name, prefix = r.get("ts"), r.get("name"), r.get("prefix")
+        if not (ts and name and prefix) or r.get("source") != "model":
+            continue
+        try:
+            dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if 9 <= dt.astimezone(local).hour <= 16:
+            best.setdefault(prefix, []).append((ts, name))
+    best = {p: sorted(v, reverse=True)[:12] for p, v in best.items()}
+    _DAYLIGHT_CACHE.update({"mtime": mtime, "frames": best})
+    return best
+
+
+def _is_night(captured_at_utc_text):
+    from zoneinfo import ZoneInfo
+    try:
+        dt = datetime.strptime(captured_at_utc_text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return False
+    h = dt.astimezone(ZoneInfo("America/Denver")).hour
+    return h < 7 or h >= 19
+
+
+def _live_stakes():
+    """Latest frame + model reading per cam, newest-and-snowiest first."""
+    now = datetime.utcnow()
+    stakes = []
+    for p in _read_json(_PREDICTIONS_FILE, []):
+        prefix = p.get("prefix")
+        if not prefix:
+            continue
+        age_h = None
+        if p.get("captured_at"):
+            try:
+                age_h = (now - datetime.strptime(p["captured_at"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600
+            except ValueError:
+                pass
+        live = age_h is not None and age_h <= _LIVE_MAX_AGE_H and not p.get("error")
+        sherpa = p.get("stake_type") == "sherpa_bar"
+        reading = p.get("snowfall_24h_inches") if sherpa else p.get("depth_inches")
+        stakes.append({
+            "prefix": prefix,
+            "resort": p.get("resort") or SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+            "image_url": f"/media/snapshots/{p['image']}" if p.get("image") else None,
+            "captured_at": p.get("captured_at"),
+            "age_h": round(age_h, 1) if age_h is not None else None,
+            "live": live,
+            "reading": reading if live else None,
+            "reading_label": "24h" if sherpa else "on stake",
+            "confidence": p.get("confidence"),
+            "stake_type": p.get("stake_type"),
+        })
+    daylight = _latest_daylight_frames()
+    for st in stakes:
+        st["display_url"], st["display_note"] = st["image_url"], None
+        if not _is_night(st["captured_at"]):
+            continue
+        # Only a recent daylight frame that still exists on disk (thinning deletes some).
+        cutoff = (datetime.utcnow() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
+        for ts, name in daylight.get(st["prefix"], []):
+            if ts < cutoff:
+                break
+            if os.path.exists(f"/snowcam-snapshots/{name}"):
+                st["display_url"] = f"/media/snapshots/{name}"
+                st["display_note"] = "last daylight frame"
+                break
+    stakes.sort(key=lambda s: (not s["live"], -(s["reading"] or 0), s["resort"]))
+    return stakes
+
+
+def home(request):
+    highlights, catalog = _highlights()
+    season = _current_season()
+    pinned = [h for h in highlights if h["pinned"]]
+    this_season = [h for h in highlights if h["season"] == season]
+    hero = (pinned or sorted(this_season, key=lambda h: h["end"], reverse=True) or highlights or [None])[0]
+    gallery = [h for h in highlights if not hero or h["id"] != hero["id"]]
+    seasons = sorted({h["season"] for h in gallery}, reverse=True)
+    stakes = _live_stakes()
+    return render(request, "dashboard/home.html", {
+        "hero": hero,
+        "gallery": gallery,
+        "seasons": seasons,
+        "current_season": season,
+        "stakes": stakes,
+        "live_count": sum(1 for s in stakes if s["live"]),
+        "cam_count": len(stakes),
+        "storm_count": len(highlights),
+        "generated_at": catalog.get("generated_at"),
+    })
+
+
+def _latest_timelapses(prefix):
+    out = []
+    head = prefix + "_"
+    for key, label, directory, url_prefix in _TIMELAPSE_DIRS:
+        try:
+            names = [n for n in os.listdir(directory) if n.startswith(head) and n.endswith(".mp4")]
+        except OSError:
+            names = []
+        if names:
+            newest = max(names, key=lambda n: (n[len(head):].split("-")[-1], n))
+            out.append({"key": key, "label": label, "url": url_prefix + newest})
+    return out
+
+
+def resort_page(request, prefix):
+    from django.http import Http404
+    stakes = {s["prefix"]: s for s in _live_stakes()}
+    if prefix not in stakes and prefix not in SNOWCAM_PREFIX_TO_RESORT:
+        raise Http404("Unknown cam")
+    stake = stakes.get(prefix) or {"prefix": prefix, "resort": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix), "live": False}
+    highlights, catalog = _highlights()
+    mine = [h for h in highlights if h["prefix"] == prefix]
+
+    season = _current_season()
+    start_year = int(season[:4])
+    series = catalog.get("daily", {}).get(prefix, [])
+    this = [r for r in series if r[0] >= f"{start_year}-08-01"]
+    if not any(v > 0 for _, v in this):  # nothing yet this season: show last season instead
+        chart_season = f"{start_year - 1}-{str(start_year)[2:]}"
+        this = [r for r in series if f"{start_year - 1}-08-01" <= r[0] < f"{start_year}-08-01"]
+    else:
+        chart_season = season
+    # Resort-reported 24h totals (same-day reports only) for the same window.
+    reported = []
+    report_name = stake["resort"].replace(" Headwaters", "")
+    if this:
+        try:
+            with connection.cursor() as cur:
+                cur.execute(
+                    "SELECT report_date, snow_24h_in FROM resort_snow_reports_fresh "
+                    "WHERE resort = %s AND report_date BETWEEN %s AND %s AND snow_24h_in IS NOT NULL "
+                    "ORDER BY report_date",
+                    [report_name, this[0][0], this[-1][0]],
+                )
+                reported = [[d.isoformat(), float(v)] for d, v in cur.fetchall()]
+        except Exception:
+            reported = []
+
+    # Model-independent reference: daily depth gain at the nearest SNOTEL station.
+    sn = catalog.get("snotel_daily", {}).get(prefix) or {}
+    snotel = [r for r in sn.get("series", []) if this and this[0][0] <= r[0] <= this[-1][0]]
+    return render(request, "dashboard/resort.html", {
+        "stake": stake,
+        "timelapses": _latest_timelapses(prefix),
+        "highlights": mine,
+        "chart_season": chart_season,
+        "fc": _resort_forecast(prefix)[0],
+        "fc_zone": _resort_forecast(prefix)[1],
+        "snotel_station": f"{sn['station']} ({sn['km']} km)" if sn else None,
+        "sherpa": stake.get("stake_type") == "sherpa_bar",
+        "chart_data": {"model": this, "reported": reported, "snotel": snotel,
+                       "sherpa": stake.get("stake_type") == "sherpa_bar"},
+    })
+
+
+def _curate_key():
+    try:
+        return _CURATE_KEY_FILE.read_text().strip()
+    except OSError:
+        return ""
+
+
+def curate_page(request):
+    _, catalog = _highlights()
+    overrides = _read_json(_HL_OVERRIDES, {})
+    selected = [{**h, "pinned": bool(overrides.get(h["id"], {}).get("pinned")),
+                 "hidden": bool(overrides.get(h["id"], {}).get("hidden")),
+                 "dates_label": _dates_label(h["start"], h["end"])} for h in catalog.get("highlights", [])]
+    for c in catalog.get("candidates", []):
+        c["dates_label"] = _dates_label(c["start"], c["end"])
+    candidates = catalog.get("candidates", [])
+    hidden = [c for c in candidates if overrides.get(c["id"], {}).get("hidden")]
+    others = [c for c in candidates if not overrides.get(c["id"], {}).get("hidden")]
+    return render(request, "dashboard/curate.html", {
+        "selected": selected, "hidden": hidden, "others": others[:60],
+        "pinned_pending": [k for k, v in overrides.items() if v.get("pinned") and k not in {h["id"] for h in selected}],
+    })
+
+
+def api_curate(request):
+    """POST {id, action: pin|unpin|hide|unhide, key} -> updates highlight_overrides.json."""
+    import hmac
+    import json as _json
+    from django.http import JsonResponse
+    if request.method != "POST":
+        return JsonResponse({"error": "POST only"}, status=405)
+    try:
+        body = _json.loads(request.body or b"{}")
+    except ValueError:
+        return JsonResponse({"error": "bad json"}, status=400)
+    expected = _curate_key()
+    if not expected or not hmac.compare_digest(str(body.get("key", "")), expected):
+        return JsonResponse({"error": "bad key"}, status=403)
+    hid, action = str(body.get("id", "")), body.get("action")
+    if not hid or action not in ("pin", "unpin", "hide", "unhide"):
+        return JsonResponse({"error": "need id and action"}, status=400)
+    overrides = _read_json(_HL_OVERRIDES, {})
+    entry = overrides.get(hid, {})
+    if action in ("pin", "unpin"):
+        entry["pinned"] = action == "pin"
+        if entry["pinned"]:
+            entry["hidden"] = False
+    else:
+        entry["hidden"] = action == "hide"
+        if entry["hidden"]:
+            entry["pinned"] = False
+    entry = {k: v for k, v in entry.items() if v}
+    if entry:
+        overrides[hid] = entry
+    else:
+        overrides.pop(hid, None)
+    tmp = _HL_OVERRIDES.with_suffix(".tmp")
+    tmp.write_text(_json.dumps(overrides, indent=1, sort_keys=True))
+    os.replace(tmp, _HL_OVERRIDES)
+    return JsonResponse({"ok": True, "id": hid, "state": entry})
+
+
+# ---------------------------------------------------------------------------
+# Snow forecast (added 2026-10-12). Data: bin/build_forecast.py -> data/forecast.json
+# ---------------------------------------------------------------------------
+_FORECAST_FILE = _SHOWCASE_DATA / "forecast.json"
+
+
+def _forecast():
+    return _read_json(_FORECAST_FILE, {})
+
+
+def _fmt_range(r):
+    lo, hi = r.get("low", 0), r.get("high", 0)
+    if hi < 1:
+        return "a dusting" if hi >= 0.3 else "0″"
+    lo_i, hi_i = round(lo), round(hi)
+    return f"{hi_i}″" if lo_i == hi_i else f"{lo_i}–{hi_i}″"
+
+
+def _decorate_forecast(f):
+    f["r24"], f["r72"], f["r7d"] = _fmt_range(f["24h"]), _fmt_range(f["72h"]), _fmt_range(f["7d"])
+    peak = max([d["high"] for d in f["daily"]] + [1])
+    for d in f["daily"]:
+        dt = datetime.fromisoformat(d["date"])
+        d["dow"] = dt.strftime("%a")
+        d["mean_pct"] = round(100 * d["mean"] / peak)
+        d["high_pct"] = round(100 * d["high"] / peak)
+        d["label"] = _fmt_range(d)
+    return f
+
+
+def forecast_page(request):
+    data = _forecast()
+    zones = data.get("zones", [])
+    for z in zones:
+        _decorate_forecast(z["forecast"])
+        for r in z["resorts"]:
+            _decorate_forecast(r["forecast"])
+    zones.sort(key=lambda z: -z["forecast"]["7d"]["mean"])
+    points = []
+    for z in zones:
+        wx = z.get("weather") or []
+        for d, w in zip(z["forecast"]["daily"], wx):
+            d["tmax_f"], d["tmin_f"], d["snow_level_ft"] = w.get("tmax_f"), w.get("tmin_f"), w.get("snow_level_ft")
+            d["rain"] = (w.get("rain_hours") or 0) > 0
+        for r in z["resorts"]:
+            if r.get("coords"):
+                points.append({"lat": r["coords"][0], "lon": r["coords"][1], "name": r["resort"], "zone": z["id"],
+                               "zone_name": z["name"], "mean": r["forecast"]["7d"]["mean"], "label": r["forecast"]["r7d"]})
+    return render(request, "dashboard/forecast.html", {
+        "zones": zones, "generated_at": data.get("generated_at"), "llm_model": data.get("llm_model"),
+        "map_points": points,
+    })
+
+
+def _resort_forecast(prefix):
+    for z in _forecast().get("zones", []):
+        for r in z["resorts"]:
+            if r["prefix"] == prefix:
+                return _decorate_forecast(r["forecast"]), z
+    return None, None
+
+
+def _forecast_strip(n=4):
+    zones = _forecast().get("zones", [])
+    zones = sorted(zones, key=lambda z: -z["forecast"]["7d"]["mean"])[:n]
+    return [{"id": z["id"], "name": z["name"], "headline": z["text"]["headline"],
+             "r7d": _fmt_range(z["forecast"]["7d"])} for z in zones]
