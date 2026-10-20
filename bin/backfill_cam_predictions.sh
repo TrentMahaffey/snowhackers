@@ -99,10 +99,13 @@ RSYNC_COUNT=$(wc -l <"$RSYNC_LIST")
 log "  Unique files to sync: $RSYNC_COUNT"
 
 # 3. rsync images + scripts + config to Blackwell
+# rsync exit 24 = "some files vanished before transfer" — harmless when images
+# are being rotated by the capture process during the manifest→transfer gap.
 log "Rsyncing images to Blackwell:$REMOTE_DIR/backfill_images/"
 ssh "$BW_USER@$BW_HOST" "mkdir -p $REMOTE_DIR/backfill_images"
 rsync -a --files-from="$RSYNC_LIST" "$LOCAL_IMG_DIR/" \
-  "$BW_USER@$BW_HOST:$REMOTE_DIR/backfill_images/"
+  "$BW_USER@$BW_HOST:$REMOTE_DIR/backfill_images/" \
+  || { rc=$?; [ $rc -eq 24 ] || exit $rc; log "  (ignored rsync exit 24: some files vanished)"; }
 
 log "Rsyncing predict_history.py + cam_config.json + manifest"
 rsync -a "$LOCAL_FT_DIR/predict_history.py" "$BW_USER@$BW_HOST:$REMOTE_DIR/"
@@ -139,7 +142,23 @@ EOSSH
 
 # 5. Pull merged history back
 log "Pulling cam_predictions_history.json to $LOCAL_HISTORY"
-rsync -a "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions_history.json" "$LOCAL_HISTORY"
+# The hourly refresh may have appended rows locally while this ran; keep them.
+cp "$LOCAL_HISTORY" "$LOCAL_HISTORY.pre-pull"
+# --inplace: snowdash bind-mounts this single file; a rename-replace freezes the site.
+rsync -a --inplace "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions_history.json" "$LOCAL_HISTORY"
+python3 - "$LOCAL_HISTORY" "$LOCAL_HISTORY.pre-pull" <<'PY'
+import json, sys
+cur_path, pre_path = sys.argv[1], sys.argv[2]
+cur, pre = json.load(open(cur_path)), json.load(open(pre_path))
+have = {(r.get("prefix"), r.get("name")) for r in cur}
+missing = [r for r in pre if (r.get("prefix"), r.get("name")) not in have]
+if missing:
+    merged = sorted(cur + missing, key=lambda r: r.get("ts") or "", reverse=True)
+    with open(cur_path, "w") as f:  # in place: bind-mounted file
+        f.write(json.dumps(merged, indent=2) + "\n")
+print(f"  kept {len(missing)} rows appended locally during the backfill")
+PY
+rm -f "$LOCAL_HISTORY.pre-pull"
 
 # 6. Re-merge labels from labels.json. predict_history.py loads its 'existing'
 #    file once at startup, so label corrections made DURING the run don't take

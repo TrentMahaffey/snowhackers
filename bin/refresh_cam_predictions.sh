@@ -22,22 +22,43 @@ LOCAL_IMG_DIR="/home/trent/snowcamtimelapse/out"
 LOCAL_FT_DIR="/home/trent/snowcammeasurement/finetune"
 LOCAL_CONFIG="$HERE/cam_config.json"
 LOCAL_OUT="$HERE/cam_predictions.json"
-ADAPTER="outputs/run_20260518_145633"
+# Per-stake-type routing (2026-10-11): run 9 reads Sherpa bars ~2x better (MAE 1.10 vs 2.10 on
+# 30 held-out Sherpa frames) but is worse on depth stakes (frozen test 1.55 vs 1.27), so
+# each stake type uses the adapter that is best for it. See finetune/TRAINING_LOGS.MD Run 9.
+ADAPTER="outputs/run_20260518_145633"          # depth stakes (run 7)
+# Per-cam adapter routing lives in cam_routing.json (2026-10-12).
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
+
+# 0. Skip while a fine-tune is training on the shared Blackwell GPU (OOM risk).
+if ssh "$BW_USER@$BW_HOST" "test -f /home/$BW_USER/snow_finetune/training.lock"; then
+  log "Training in progress on Blackwell; skipping this hour"
+  exit 0
+fi
 
 # 1. Pick latest image per resort prefix
 log "Picking latest image per resort"
 TMPLIST=$(mktemp)
 python3 - "$LOCAL_CONFIG" "$LOCAL_IMG_DIR" >"$TMPLIST" <<'PY'
-import json, sys
+import json, sys, re
 from pathlib import Path
 config = json.loads(Path(sys.argv[1]).read_text())
 img_dir = Path(sys.argv[2])
+def is_image(path):
+    try:
+        with open(path, "rb") as f:
+            head = f.read(8)
+    except OSError:
+        return False
+    return head[:3] == b"\xff\xd8\xff" or head == b"\x89PNG\r\n\x1a\n"
+
 for entry in config:
-    cands = sorted(img_dir.glob(f"{entry['prefix']}_*.jpg"))
-    if cands:
-        print(cands[-1].name)
+    pat = re.compile(re.escape(entry['prefix']) + r"_\d{8}_\d{6}(_\d+)?\.jpg$")
+    cands = sorted(p.name for p in img_dir.glob(f"{entry['prefix']}_*.jpg") if pat.match(p.name))
+    for name in reversed(cands):
+        if is_image(img_dir / name):
+            print(name)
+            break
 PY
 log "  $(wc -l <"$TMPLIST") images to sync"
 
@@ -49,6 +70,7 @@ rsync -a --files-from="$TMPLIST" "$LOCAL_IMG_DIR/" "$BW_USER@$BW_HOST:$REMOTE_DI
 log "Rsyncing predict_latest.py + cam_config.json"
 rsync -a "$LOCAL_FT_DIR/predict_latest.py" "$BW_USER@$BW_HOST:$REMOTE_DIR/"
 rsync -a "$LOCAL_CONFIG" "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_config.json"
+rsync -a "$HERE/cam_routing.json" "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_routing.json"
 
 # 3. Run inference on remote (uses venv from finetune workspace)
 log "Running inference on Blackwell"
@@ -62,16 +84,32 @@ if [ ! -d "\$ADAPTER_PATH" ]; then
   exit 1
 fi
 source /home/$BW_USER/snow_finetune/venv/bin/activate
-python3 predict_latest.py \
-  --adapter "\$ADAPTER_PATH" \
-  --config cam_config.json \
-  --img-dir images \
-  --out cam_predictions.json
+python3 - <<'PY'
+import json, subprocess
+cfg = json.load(open("cam_config.json"))
+route = json.load(open("cam_routing.json"))
+groups = {}
+for e in cfg:
+    groups.setdefault(route.get(e["prefix"], route["_default"]), []).append(e)
+got = {}
+for i, (adapter, entries) in enumerate(groups.items()):
+    json.dump(entries, open(f"cam_config_g{i}.json", "w"))
+    subprocess.run(["python3", "predict_latest.py", "--adapter", f"/home/trent-mahaffey/snow_finetune/{adapter}",
+                    "--config", f"cam_config_g{i}.json", "--img-dir", "images", "--out", f"cam_predictions_g{i}.json"], check=True)
+    for r in json.load(open(f"cam_predictions_g{i}.json")):
+        r["adapter"] = adapter.split("/")[-1]
+        got[r["prefix"]] = r
+out = [got[e["prefix"]] for e in cfg if e["prefix"] in got]
+json.dump(out, open("cam_predictions.json", "w"), indent=2)
+print(f"merged {len(out)} predictions from {len(groups)} adapters")
+PY
 EOSSH
 
 # 4. Pull predictions back
 log "Pulling predictions to $LOCAL_OUT"
-rsync -a "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions.json" "$LOCAL_OUT"
+# --inplace keeps the inode: snowdash bind-mounts this single file, and a rename-replace
+# (rsync default) leaves the container reading the old copy until it restarts.
+rsync -a --inplace "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions.json" "$LOCAL_OUT"
 
 # 5. Append today's predictions to the per-image history file so the search
 #    UI gets fresh rows even without running the full backfill.
