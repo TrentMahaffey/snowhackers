@@ -56,4 +56,7 @@ run "${COMPOSE[@]}" run --rm -T runner \
 run "${COMPOSE[@]}" run --rm -T runner \
   python -u /app/main.py init-views
 
+# Retention: drop long-lead rows from runs older than 48 h (see bin/forecast_retention.sql)
+run "${COMPOSE[@]}" exec -T db psql -U snowuser -d snow -f /dev/stdin < bin/forecast_retention.sql
+
 echo "==== [$(TS)] update complete ====" | tee -a "$LOG_FILE"
