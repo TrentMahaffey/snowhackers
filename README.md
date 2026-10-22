@@ -137,6 +137,14 @@ replaced by a model row. Use `bin/history_db.py` (`export FILE`, `upsert FILE`, 
 after a labeling sprint, and the search/accuracy pages, resort pages and `build_highlights.py`
 read the table. The last JSON copy is `~/snowwork/cam_predictions_history.final-20261021.json`.
 
+### Accuracy page (`bin/build_accuracy_demo.py`)
+
+/snowcams/accuracy/ compares labeled truth (`~/snowcammeasurement/labels/accuracy_demo_truth_20260804.json`
+plus the `*_holdout_*.json` sets) with readings from each cam's production adapter. Re-run with
+`--predict` after training a new adapter or changing routing in `cams.json` (~3 min GPU);
+without it, it re-bakes from `finetune/accuracy_demo_predictions.json`. 2026-10-21: 32 resorts,
+126 samples, MAE 1.2 in.
+
 ### Gotchas
 
 - `cam_predictions.json` (latest reading per cam) is bind-mounted into snowdash as a single

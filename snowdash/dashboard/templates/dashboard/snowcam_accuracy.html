@@ -182,8 +182,8 @@
       Ground truth is a human reading of the stake in each image. Samples badged
       &ldquo;training image&rdquo; were part of the model&rsquo;s fine-tuning data, so treat those as
       illustrations rather than proof &mdash; the honest benchmark is the held-out test set quoted
-      above, whose error is essentially identical to this demo&rsquo;s.
-      Model: Qwen2.5-VL-7B with a LoRA fine-tune, run {{ model_run }}. Generated {{ generated_at }}.
+      above, whose error is close to this demo&rsquo;s.
+      Model: Qwen2.5-VL-7B with LoRA fine-tunes; each cam is read by the adapter that reads it best, as on the live site &mdash; {{ model_run }}. Generated {{ generated_at }}.
     </div>
   </div>
 
