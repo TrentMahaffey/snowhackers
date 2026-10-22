@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import camreg  # noqa: E402
+from snowlib import km, psql_csv  # noqa: E402
 import history_db  # noqa: E402
 
 LOCAL = ZoneInfo("America/Denver")
@@ -157,13 +158,6 @@ SNOTEL_MIN_DEPTH_IN = 2.0   # a nearby station must gain this much snow depth...
 SNOTEL_MIN_SWE_IN = 0.2     # ...or this much water (SWE) over the storm window
 
 
-def _psql_csv(sql):
-    out = subprocess.run(["docker", "exec", "snowhackers-db-1", "psql", "-U", "snowuser", "-d", "snow", "-At",
-                          "-c", f"COPY ({sql}) TO STDOUT WITH CSV"], check=True, capture_output=True, text=True).stdout
-    import csv, io
-    return list(csv.reader(io.StringIO(out)))
-
-
 def snotel_confirm(storms):
     """Annotate each storm with whether nearby SNOTEL stations saw snow during it.
 
@@ -172,16 +166,9 @@ def snotel_confirm(storms):
     the stake (Steamboat 2025-12-07..09: rime ice on the stake, stations +1.2-1.5" SWE) --
     those are what /curate/ Hide is for.
     """
-    import math
-
-    def km(a, b):
-        la1, lo1, la2, lo2 = map(math.radians, (*a, *b))
-        h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
-        return 6371 * 2 * math.asin(math.sqrt(h))
-
     try:
         stations = [(t, n, float(la), float(lo)) for t, n, la, lo in
-                    _psql_csv("select station_triplet, name, latitude, longitude from snotel_station where latitude is not null")]
+                    psql_csv("select station_triplet, name, latitude, longitude from snotel_station where latitude is not null")]
     except Exception as e:
         print(f"  [snotel] unavailable ({e}); storms left unconfirmed")
         return {}, {}
@@ -198,7 +185,7 @@ def snotel_confirm(storms):
     d1 = today
     obs = defaultdict(dict)
     quoted = ",".join("'" + t.replace("'", "") + "'" for t in triplets)
-    for t, d, dep, swe in _psql_csv(f"select station_triplet, date, snow_depth_cm, swe_cm from snotel_daily_obs "
+    for t, d, dep, swe in psql_csv(f"select station_triplet, date, snow_depth_cm, swe_cm from snotel_daily_obs "
                                     f"where station_triplet in ({quoted}) and date between '{d0}' and '{d1}'"):
         obs[t][date.fromisoformat(d)] = (float(dep) / 2.54 if dep else None, float(swe) / 2.54 if swe else None)
     for s in storms:

@@ -18,10 +18,7 @@ Runs nightly on the .110 host after bin/update_snow.sh (02:07) has pulled GFS/IC
 Usage: python3 bin/build_forecast.py [--no-llm] [--zones co_i70,ut_cottonwoods]
 """
 import argparse
-import csv
-import io
 import json
-import math
 import re
 import subprocess
 import sys
@@ -33,6 +30,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import camreg  # noqa: E402
+from snowlib import km, psql_csv  # noqa: E402
 from build_highlights import CAM_COORDS  # noqa: E402
 
 LOCAL = ZoneInfo("America/Denver")
@@ -53,18 +51,6 @@ MODELS = ("gfs", "ecmwf", "icon")
 
 
 # ---------------------------------------------------------------- data
-
-def psql_csv(sql):
-    out = subprocess.run(["docker", "exec", "snowhackers-db-1", "psql", "-U", "snowuser", "-d", "snow", "-At",
-                          "-c", f"COPY ({sql}) TO STDOUT WITH CSV"], check=True, capture_output=True, text=True).stdout
-    return list(csv.reader(io.StringIO(out)))
-
-
-def km(a, b):
-    la1, lo1, la2, lo2 = map(math.radians, (*a, *b))
-    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
-    return 6371 * 2 * math.asin(math.sqrt(h))
-
 
 def nearest_stations(stations):
     near = {}
