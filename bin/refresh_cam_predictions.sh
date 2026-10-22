@@ -2,11 +2,13 @@
 # Refresh model predictions for all configured snow cams.
 #
 # Workflow:
-#   1. For each resort in cam_config.json, pick the latest .jpg in
+#   0. Regenerate cam_config.json + cam_routing.json from cams.json (bin/camreg.py).
+#   1. For each model cam in cam_config.json, pick the latest .jpg in
 #      /home/trent/snowcamtimelapse/out/ matching the prefix.
 #   2. rsync those images to the Blackwell (only newer/changed).
-#   3. Sync the latest predict_latest.py + cam_config.json to Blackwell.
-#   4. Run predict_latest.py over SSH.
+#   3. Sync predict_latest.py + cam_config.json + cam_routing.json to Blackwell.
+#   4. Run predict_latest.py over SSH, once per adapter group (each cam's adapter
+#      comes from cams.json; run 7 is the default), and merge.
 #   5. Pull the predictions JSON back to the snowhackers mount.
 #
 # Cron: hourly. Output: /home/trent/snowhackers/cam_predictions.json
@@ -22,11 +24,7 @@ LOCAL_IMG_DIR="/home/trent/snowcamtimelapse/out"
 LOCAL_FT_DIR="/home/trent/snowcammeasurement/finetune"
 LOCAL_CONFIG="$HERE/cam_config.json"
 LOCAL_OUT="$HERE/cam_predictions.json"
-# Per-stake-type routing (2026-10-11): run 9 reads Sherpa bars ~2x better (MAE 1.10 vs 2.10 on
-# 30 held-out Sherpa frames) but is worse on depth stakes (frozen test 1.55 vs 1.27), so
-# each stake type uses the adapter that is best for it. See finetune/TRAINING_LOGS.MD Run 9.
-ADAPTER="outputs/run_20260518_145633"          # depth stakes (run 7)
-# Per-cam adapter routing lives in cam_routing.json (2026-10-12).
+# Per-cam adapter routing: the `adapter` field in cams.json (why: finetune/TRAINING_LOGS.MD runs 9-10).
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -67,6 +65,7 @@ log "Rsyncing images to Blackwell"
 ssh "$BW_USER@$BW_HOST" "mkdir -p $REMOTE_DIR/images"
 rsync -a --files-from="$TMPLIST" "$LOCAL_IMG_DIR/" "$BW_USER@$BW_HOST:$REMOTE_DIR/images/"
 
+python3 "$HERE/bin/camreg.py" export >/dev/null  # cam_config/cam_routing are generated from cams.json
 log "Rsyncing predict_latest.py + cam_config.json"
 rsync -a "$LOCAL_FT_DIR/predict_latest.py" "$BW_USER@$BW_HOST:$REMOTE_DIR/"
 rsync -a "$LOCAL_CONFIG" "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_config.json"
@@ -77,20 +76,17 @@ log "Running inference on Blackwell"
 ssh "$BW_USER@$BW_HOST" bash <<EOSSH
 set -euo pipefail
 cd /home/$BW_USER/snowcam_predict
-# Resolve adapter path - it lives in the finetune workspace
-ADAPTER_PATH=/home/$BW_USER/snow_finetune/$ADAPTER
-if [ ! -d "\$ADAPTER_PATH" ]; then
-  echo "Adapter not found at \$ADAPTER_PATH" >&2
-  exit 1
-fi
 source /home/$BW_USER/snow_finetune/venv/bin/activate
 python3 - <<'PY'
-import json, subprocess
+import json, os, subprocess
 cfg = json.load(open("cam_config.json"))
 route = json.load(open("cam_routing.json"))
 groups = {}
 for e in cfg:
     groups.setdefault(route.get(e["prefix"], route["_default"]), []).append(e)
+missing = [a for a in groups if not os.path.isdir(f"/home/trent-mahaffey/snow_finetune/{a}")]
+if missing:
+    raise SystemExit(f"Adapter(s) not found in snow_finetune: {missing}")
 got = {}
 for i, (adapter, entries) in enumerate(groups.items()):
     json.dump(entries, open(f"cam_config_g{i}.json", "w"))

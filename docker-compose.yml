@@ -108,6 +108,7 @@ services:
       - ${SNOWCAM_OUT_DIR:-./snowcam/out}:/snowcam-snapshots:ro
       - ./cam_predictions.json:/snowcam-predictions/cam_predictions.json:ro
       - ./cam_predictions_history.json:/snowcam-predictions/cam_predictions_history.json:ro
+      - ./cams.json:/snowcam-config/cams.json:ro
     command:
       - bash
       - -lc

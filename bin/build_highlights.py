@@ -26,6 +26,9 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import camreg  # noqa: E402
+
 LOCAL = ZoneInfo("America/Denver")
 SNOWHACKERS = Path("/home/trent/snowhackers")
 CAMS = Path("/home/trent/snowcamtimelapse")
@@ -147,24 +150,8 @@ def find_storms(scored):
     return storms
 
 
-# Approximate stake-cam coordinates, for finding the nearest SNOTEL stations.
-CAM_COORDS = {
-    "abasin": (39.642, -105.871), "alta_snowstake": (40.588, -111.638), "aspen": (39.186, -106.818),
-    "highlands": (39.182, -106.855), "buttermilk": (39.205, -106.861), "snowmass": (39.208, -106.950),
-    "beavercreek_snowstake": (39.604, -106.517), "breckenridge_snowstake": (39.480, -106.067),
-    "keystone_snowstake": (39.605, -105.954), "copper": (39.501, -106.156), "loveland": (39.680, -105.898),
-    "winter_park": (39.886, -105.763), "eldora": (39.938, -105.584), "steamboat_snowstake": (40.457, -106.804),
-    "taos_poco": (36.596, -105.454), "purgatory_snowstake": (37.630, -107.814), "skicooper_stake": (39.361, -106.301),
-    "wolfcreek_summit": (37.472, -106.793), "telluride_powcam": (37.937, -107.812),
-    "monarch": (38.512, -106.332), "powderhorn": (39.069, -108.150), "sunlight_snapshot": (39.399, -107.338),
-    "crestedbutte_pow": (38.899, -106.965), "vail_snowsummit": (39.606, -106.355),
-    "snowbird_snowstake": (40.581, -111.657), "park_city": (40.651, -111.508), "deer_valley": (40.637, -111.478),
-    "powder_mountain": (41.380, -111.780), "snowbasin": (41.216, -111.857), "brian_head": (37.702, -112.850),
-    "sundance": (40.393, -111.588), "grandtarghee": (43.790, -110.958), "bigsky_andesite": (45.284, -111.401),
-    "bigsky_headwaters": (45.284, -111.401), "bridgerbowl_redchair": (45.817, -110.897),
-    "discovery_snowstake": (46.249, -113.239), "whitefish": (48.481, -114.357), "northstar": (39.274, -120.121),
-    "boreal": (39.336, -120.350), "kirkwood": (38.685, -120.065),
-}
+# Approximate stake-cam coordinates (cams.json), for finding the nearest SNOTEL stations.
+CAM_COORDS = camreg.coords()
 SNOTEL_MAX_KM = 40
 SNOTEL_MIN_DEPTH_IN = 2.0   # a nearby station must gain this much snow depth...
 SNOTEL_MIN_SWE_IN = 0.2     # ...or this much water (SWE) over the storm window

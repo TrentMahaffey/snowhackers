@@ -82,7 +82,7 @@ for local curl) in front of `snowapi-snowdash` (Django). Sibling repos: `~/snowc
 | When | Job |
 |---|---|
 | 02:07 | `bin/update_snow.sh` — SNOTEL obs + GFS/ICON/ECMWF forecasts |
-| :13 hourly | `bin/refresh_cam_predictions.sh` — runs the fine-tuned Qwen2.5-VL model on the Blackwell (192.168.0.117) over the latest frame per cam in `cam_config.json`; routes each cam to the adapter in `cam_routing.json` (run 7 default, run 9 Sherpa, run 10 newer cams); skips the hour while `training.lock` exists on the Blackwell |
+| :13 hourly | `bin/refresh_cam_predictions.sh` — runs the fine-tuned Qwen2.5-VL model on the Blackwell (192.168.0.117) over the latest frame per model cam in `cams.json` (via the generated `cam_config.json`); routes each cam to its adapter (generated `cam_routing.json`) (run 7 default, run 9 Sherpa, run 10 newer cams); skips the hour while `training.lock` exists on the Blackwell |
 | 06/08/12/16:40 | `bin/update_resort_reports.sh` — resort-published snow reports → table `resort_snow_reports` |
 | 04:15 | `bin/build_forecast.py` — zone forecasts → `snowdash/dashboard/data/forecast.json` (+ `forecast_archive/`) |
 | Mon 05:30 | `bin/score_forecasts.py` — model skill vs SNOTEL per zone → `data/forecast_skill.json` |
@@ -109,13 +109,28 @@ resorts. Survey of endpoints: `resort_snow_report_sources.json`. View
 reject the runner container's TLS fingerprint, so the fetch runs on the host and the runner
 only loads the JSON.
 
+### Cam registry (`cams.json`, added 2026-10-21)
+
+Every cam is defined once in `cams.json`: `prefix` (capture filename prefix), `name` (display
+name; resort-report rows join on it), `region`, `lat`/`lon` (nearest SNOTEL), `zone` (forecast
+zone id; zones are listed at the top), and for cams the stake-reading model runs on, `model`
+(`stake_type`, prompt `label`/`note`, optional `adapter` overriding `default_adapter`).
+Cams are grouped by region; that order is the order on /snowcams/.
+
+`cam_config.json` and `cam_routing.json` are **generated** — don't edit them. After changing
+`cams.json` run `python3 bin/camreg.py export` (the hourly refresh also runs it); `camreg.py
+check` reports if they're stale. The site reads `cams.json` through a bind mount at
+`/snowcam-config/cams.json` (picked up on change, no restart); `build_highlights.py`,
+`build_forecast.py` and `score_forecasts.py` import `bin/camreg.py`.
+
+To add a cam: add the capture line in `~/snowcamtimelapse/run_all_once.sh`, an entry in
+`cams.json`, then `camreg.py export`.
+
 ### Gotchas
 
 - `cam_predictions.json` and `cam_predictions_history.json` are bind-mounted into snowdash as
   single files: anything that replaces them by rename leaves the site frozen until restart.
   Write them in place (`rsync --inplace`) — the refresh and both backfill scripts do.
-- A cam must be in both name maps in `snowdash/dashboard/views.py` (video `resorts` dict and
-  `SNOWCAM_PREFIX_TO_RESORT`) and in `cam_config.json` to get predictions.
 - `SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"` is required: OpenStreetMap
   tiles are blocked without a Referer (map broke 2026-10).
 - Model accuracy by cam (2026-10-10 audit vs SNOTEL): Sherpa-bar cams (Snowmass, Aspen,
@@ -124,7 +139,7 @@ only loads the JSON.
 
 ### Zone forecasts (`bin/build_forecast.py`, added 2026-10-12)
 
-- 14 zones (defined in `ZONES` in the script), each a group of stake-cam resorts; each resort uses its 2
+- 16 zones (defined in `cams.json`), each a group of stake-cam resorts; each resort uses its 2
   nearest SNOTEL stations (≤40 km). For every station the latest run per model is used — run
   timestamps differ per station, so never take a global "latest run".
 - Numbers are deterministic: per-model 24h / 72h / 7-day sums, ensemble mean, model range, and a

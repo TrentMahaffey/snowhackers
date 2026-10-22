@@ -602,54 +602,7 @@ def api_snowcam_videos(request):
         "monthly": {"path": Path("/snowcam-timelapses30"), "url_prefix": "/media/snowcams30/", "label": "30 Day"},
     }
 
-    # Resort patterns
-    resorts = {
-        # Colorado
-        "A-Basin": "abasin",
-        "Aspen Mountain": "aspen",
-        "Aspen Highlands": "highlands",
-        "Buttermilk": "buttermilk",
-        "Snowmass": "snowmass",
-        "Beaver Creek": "beavercreek_snowstake",
-        "Breckenridge": "breckenridge_snowstake",
-        "Copper": "copper",
-        "Crested Butte": "crestedbutte_pow",
-        "Eldora": "eldora",
-        "Keystone": "keystone_snowstake",
-        "Loveland": "loveland",
-        "Monarch": "monarch",
-        "Purgatory": "purgatory_snowstake",
-        "Ski Cooper": "skicooper_stake",
-        "Wolf Creek": "wolfcreek_summit",
-        "Taos": "taos_poco",
-        "Powderhorn": "powderhorn",
-        "Steamboat": "steamboat_snowstake",
-        "Sunlight": "sunlight_snapshot",
-        "Telluride": "telluride_powcam",
-        "Vail": "vail_snowsummit",
-        "Winter Park": "winter_park",
-        # Utah
-        "Alta": "alta_snowstake",
-        "Snowbird": "snowbird_snowstake",
-        "Park City": "park_city",
-        "Sundance": "sundance",
-        "Brian Head": "brian_head",
-        "Cherry Peak": "cherry_peak",
-        "Powder Mountain": "powder_mountain",
-        "Deer Valley": "deer_valley",
-        "Snowbasin": "snowbasin",
-        # Montana / Wyoming / Idaho
-        "Big Sky": "bigsky_andesite",
-        "Big Sky Headwaters": "bigsky_headwaters",
-        "Bridger Bowl": "bridgerbowl_redchair",
-        "Discovery": "discovery_snowstake",
-        "Grand Targhee": "grandtarghee",
-        "Whitefish": "whitefish",
-        # California / Nevada
-        "Boreal": "boreal",
-        "Kirkwood": "kirkwood",
-        "Northstar": "northstar",
-    }
+    resorts = {name: prefix for prefix, name in _cam_names().items()}
 
     videos = []
 
@@ -723,57 +676,29 @@ def api_snowcam_predictions(request):
 # Image search (per-image predictions over the captured history)
 # ---------------------------------------------------------------------------
 
-# Reverse map: filename prefix → display name (mirrors api_snowcam_videos).
-# Keep these two in sync.
 # Filename pattern used to recognize the timestamp suffix on a snowcam image.
 # Snowmass appends an extra _NNN millisecond field; treat it as optional.
 SNOWCAM_FILENAME_RE = __import__("re").compile(
     r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})(?:_\d+)?\.jpg$"
 )
 
-SNOWCAM_PREFIX_TO_RESORT = {
-    "abasin": "A-Basin",
-    "alta_snowstake": "Alta",
-    "aspen": "Aspen Mountain",
-    "beavercreek_snowstake": "Beaver Creek",
-    "bigsky_andesite": "Big Sky",
-    "bigsky_headwaters": "Big Sky Headwaters",
-    "boreal": "Boreal",
-    "breckenridge_snowstake": "Breckenridge",
-    "bridgerbowl_redchair": "Bridger Bowl",
-    "brian_head": "Brian Head",
-    "buttermilk": "Buttermilk",
-    "cherry_peak": "Cherry Peak",
-    "deer_valley": "Deer Valley",
-    "copper": "Copper",
-    "crestedbutte_pow": "Crested Butte",
-    "discovery_snowstake": "Discovery",
-    "eldora": "Eldora",
-    "grandtarghee": "Grand Targhee",
-    "highlands": "Aspen Highlands",
-    "keystone_snowstake": "Keystone",
-    "kirkwood": "Kirkwood",
-    "loveland": "Loveland",
-    "monarch": "Monarch",
-    "purgatory_snowstake": "Purgatory",
-    "skicooper_stake": "Ski Cooper",
-    "wolfcreek_summit": "Wolf Creek",
-    "taos_poco": "Taos",
-    "northstar": "Northstar",
-    "park_city": "Park City",
-    "powder_mountain": "Powder Mountain",
-    "powderhorn": "Powderhorn",
-    "snowbird_snowstake": "Snowbird",
-    "snowbasin": "Snowbasin",
-    "snowmass": "Snowmass",
-    "steamboat_snowstake": "Steamboat",
-    "sundance": "Sundance",
-    "sunlight_snapshot": "Sunlight",
-    "telluride_powcam": "Telluride",
-    "vail_snowsummit": "Vail",
-    "whitefish": "Whitefish",
-    "winter_park": "Winter Park",
-}
+_cams_cache = {"mtime": None, "names": {}}
+
+
+def _cam_names():
+    """{prefix: display name} from the cam registry (cams.json, mounted at /snowcam-config)."""
+    import json as _json
+    path = Path("/snowcam-config/cams.json")
+    if not path.exists():
+        path = Path(settings.BASE_DIR).parent / "cams.json"
+    try:
+        mtime = path.stat().st_mtime
+        if _cams_cache["mtime"] != mtime:
+            cams = _json.loads(path.read_text())["cams"]
+            _cams_cache.update(mtime=mtime, names={c["prefix"]: c["name"] for c in cams})
+    except (OSError, ValueError, KeyError):
+        pass  # keep the last good copy
+    return _cams_cache["names"]
 
 
 _history_cache = {"path": None, "mtime": None, "rows": None}
@@ -829,7 +754,7 @@ def api_snowcam_resorts(request):
             seen.add(prefix)
             out.append({
                 "prefix": prefix,
-                "label": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+                "label": _cam_names().get(prefix, prefix),
             })
     out.sort(key=lambda x: x["label"])
     return JsonResponse({"resorts": out, "total": len(out)})
@@ -965,7 +890,7 @@ def api_snowcam_images(request):
         filename = r.get("name") or ""
         items.append({
             "resort_prefix": prefix,
-            "resort_label": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+            "resort_label": _cam_names().get(prefix, prefix),
             "ts": r.get("ts"),
             "filename": filename,
             "image_url": f"/media/snapshots/{filename}" if filename else None,
@@ -1073,7 +998,7 @@ def api_snowcam_depth_grid(request):
                 })
         out_resorts.append({
             "prefix": prefix,
-            "label": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+            "label": _cam_names().get(prefix, prefix),
             "samples": samples,
             "total_predictions": len(model_rows),
             "total_labels": len(label_rows),
@@ -1230,7 +1155,7 @@ def _live_stakes():
         reading = p.get("snowfall_24h_inches") if sherpa else p.get("depth_inches")
         stakes.append({
             "prefix": prefix,
-            "resort": p.get("resort") or SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix),
+            "resort": p.get("resort") or _cam_names().get(prefix, prefix),
             "image_url": f"/media/snapshots/{p['image']}" if p.get("image") else None,
             "captured_at": p.get("captured_at"),
             "age_h": round(age_h, 1) if age_h is not None else None,
@@ -1297,9 +1222,9 @@ def _latest_timelapses(prefix):
 def resort_page(request, prefix):
     from django.http import Http404
     stakes = {s["prefix"]: s for s in _live_stakes()}
-    if prefix not in stakes and prefix not in SNOWCAM_PREFIX_TO_RESORT:
+    if prefix not in stakes and prefix not in _cam_names():
         raise Http404("Unknown cam")
-    stake = stakes.get(prefix) or {"prefix": prefix, "resort": SNOWCAM_PREFIX_TO_RESORT.get(prefix, prefix), "live": False}
+    stake = stakes.get(prefix) or {"prefix": prefix, "resort": _cam_names().get(prefix, prefix), "live": False}
     highlights, catalog = _highlights()
     mine = [h for h in highlights if h["prefix"] == prefix]
 

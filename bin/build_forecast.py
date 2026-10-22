@@ -32,6 +32,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import camreg  # noqa: E402
 from build_highlights import CAM_COORDS  # noqa: E402
 
 LOCAL = ZoneInfo("America/Denver")
@@ -47,24 +48,7 @@ LLM_MODEL = "qwen3:32b"
 LLM_MIN_FREE_MB = 22000      # qwen3:32b Q4 needs ~20 GB; GPU is shared with training + kedit
 LLM_WAIT_MIN = 60
 
-ZONES = [
-    ("co_i70", "Colorado — I-70 / Summit County", ["abasin", "keystone_snowstake", "breckenridge_snowstake", "copper", "loveland", "vail_snowsummit", "beavercreek_snowstake"]),
-    ("co_front", "Colorado — Front Range", ["winter_park", "eldora"]),
-    ("co_elks", "Colorado — Aspen / Elk Mountains", ["aspen", "highlands", "buttermilk", "snowmass", "sunlight_snapshot"]),
-    ("co_park", "Colorado — Park Range (Steamboat)", ["steamboat_snowstake"]),
-    ("co_gunnison", "Colorado — Gunnison / Sawatch", ["crestedbutte_pow", "monarch", "skicooper_stake"]),
-    ("co_sanjuans", "Colorado — San Juans", ["purgatory_snowstake", "wolfcreek_summit", "telluride_powcam"]),
-    ("co_mesa", "Colorado — Grand Mesa", ["powderhorn"]),
-    ("nm_north", "New Mexico — Sangre de Cristo (Taos)", ["taos_poco"]),
-    ("ut_cottonwoods", "Utah — Cottonwood Canyons", ["alta_snowstake", "snowbird_snowstake"]),
-    ("ut_wasatch_back", "Utah — Park City / Wasatch Back", ["park_city", "deer_valley", "sundance"]),
-    ("ut_ogden", "Utah — Ogden Valley", ["powder_mountain", "snowbasin"]),
-    ("ut_south", "Utah — Southern Utah", ["brian_head"]),
-    ("wy_tetons", "Wyoming — Tetons (west slope)", ["grandtarghee"]),
-    ("mt_sw", "Montana — Big Sky / Bridgers", ["bigsky_andesite", "bridgerbowl_redchair"]),
-    ("mt_nw", "Montana — Northwest", ["whitefish", "discovery_snowstake"]),
-    ("ca_tahoe", "California — Lake Tahoe", ["northstar", "boreal", "kirkwood"]),
-]
+ZONES = camreg.zones()  # [(zone_id, name, [cam prefixes])] from cams.json
 MODELS = ("gfs", "ecmwf", "icon")
 
 

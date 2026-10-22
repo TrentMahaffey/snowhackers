@@ -1,0 +1,605 @@
+{
+ "_doc": "Single source of truth for snow cams. Edit here, then run: python3 bin/camreg.py export  (regenerates cam_config.json + cam_routing.json for the ML model). See README 'Cam registry'.",
+ "default_adapter": "outputs/run_20260518_145633",
+ "adapter_notes": "2026-10-12: run 7 best on frozen test (original resorts); run 9 best on Sherpa bars; run 10 best/tied on batch-34 cams it was trained on (except powder_mountain). See TRAINING_LOGS.MD Run 10.",
+ "zones": [
+  {
+   "id": "co_i70",
+   "name": "Colorado — I-70 / Summit County"
+  },
+  {
+   "id": "co_front",
+   "name": "Colorado — Front Range"
+  },
+  {
+   "id": "co_elks",
+   "name": "Colorado — Aspen / Elk Mountains"
+  },
+  {
+   "id": "co_park",
+   "name": "Colorado — Park Range (Steamboat)"
+  },
+  {
+   "id": "co_gunnison",
+   "name": "Colorado — Gunnison / Sawatch"
+  },
+  {
+   "id": "co_sanjuans",
+   "name": "Colorado — San Juans"
+  },
+  {
+   "id": "co_mesa",
+   "name": "Colorado — Grand Mesa"
+  },
+  {
+   "id": "nm_north",
+   "name": "New Mexico — Sangre de Cristo (Taos)"
+  },
+  {
+   "id": "ut_cottonwoods",
+   "name": "Utah — Cottonwood Canyons"
+  },
+  {
+   "id": "ut_wasatch_back",
+   "name": "Utah — Park City / Wasatch Back"
+  },
+  {
+   "id": "ut_ogden",
+   "name": "Utah — Ogden Valley"
+  },
+  {
+   "id": "ut_south",
+   "name": "Utah — Southern Utah"
+  },
+  {
+   "id": "wy_tetons",
+   "name": "Wyoming — Tetons (west slope)"
+  },
+  {
+   "id": "mt_sw",
+   "name": "Montana — Big Sky / Bridgers"
+  },
+  {
+   "id": "mt_nw",
+   "name": "Montana — Northwest"
+  },
+  {
+   "id": "ca_tahoe",
+   "name": "California — Lake Tahoe"
+  }
+ ],
+ "cams": [
+  {
+   "prefix": "abasin",
+   "name": "A-Basin",
+   "region": "Colorado",
+   "lat": 39.642,
+   "lon": -105.871,
+   "zone": "co_i70",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Arapahoe Basin",
+    "note": "Chevron logo board with vertical 1-18 inch ruler. Read snow piled at the base of the ruler (NOT on the adjacent tab)."
+   }
+  },
+  {
+   "prefix": "aspen",
+   "name": "Aspen Mountain",
+   "region": "Colorado",
+   "lat": 39.186,
+   "lon": -106.818,
+   "zone": "co_elks",
+   "model": {
+    "stake_type": "sherpa_bar",
+    "label": "Aspen Mountain",
+    "note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
+    "adapter": "outputs/run_20261010_193642"
+   }
+  },
+  {
+   "prefix": "highlands",
+   "name": "Aspen Highlands",
+   "region": "Colorado",
+   "lat": 39.182,
+   "lon": -106.855,
+   "zone": "co_elks",
+   "model": {
+    "stake_type": "sherpa_bar",
+    "label": "Aspen Highlands",
+    "note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
+    "adapter": "outputs/run_20261010_193642"
+   }
+  },
+  {
+   "prefix": "buttermilk",
+   "name": "Buttermilk",
+   "region": "Colorado",
+   "lat": 39.205,
+   "lon": -106.861,
+   "zone": "co_elks",
+   "model": {
+    "stake_type": "sherpa_bar",
+    "label": "Buttermilk",
+    "note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
+    "adapter": "outputs/run_20261010_193642"
+   }
+  },
+  {
+   "prefix": "snowmass",
+   "name": "Snowmass",
+   "region": "Colorado",
+   "lat": 39.208,
+   "lon": -106.95,
+   "zone": "co_elks",
+   "model": {
+    "stake_type": "sherpa_bar",
+    "label": "Snowmass",
+    "note": "Aspen/Snowmass 'Sherpa Bar': a watch flanked by two stepped wooden ladders.",
+    "adapter": "outputs/run_20261010_193642"
+   }
+  },
+  {
+   "prefix": "beavercreek_snowstake",
+   "name": "Beaver Creek",
+   "region": "Colorado",
+   "lat": 39.604,
+   "lon": -106.517,
+   "zone": "co_i70",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Beaver Creek",
+    "note": "Indoor decorative display: wooden wall, broken clock, thermometer, two chocolate-chip cookies, vertical 1-24 ruler. Mostly 0\"."
+   }
+  },
+  {
+   "prefix": "breckenridge_snowstake",
+   "name": "Breckenridge",
+   "region": "Colorado",
+   "lat": 39.48,
+   "lon": -106.067,
+   "zone": "co_i70",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Breckenridge",
+    "note": "White 1-24 inch ruler on a wooden platform. Read snow piled at the base."
+   }
+  },
+  {
+   "prefix": "copper",
+   "name": "Copper",
+   "region": "Colorado",
+   "lat": 39.501,
+   "lon": -106.156,
+   "zone": "co_i70",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Copper Mountain",
+    "note": "Yellow 'SEND-O-METER' vertical 1-18 ruler with text labels (FRESHIES, POW DAY, DUMPING, DEEP, MEGA). Read snow piled at the base."
+   }
+  },
+  {
+   "prefix": "crestedbutte_pow",
+   "name": "Crested Butte",
+   "region": "Colorado",
+   "lat": 38.899,
+   "lon": -106.965,
+   "zone": "co_gunnison",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Crested Butte",
+    "note": "Red Crested Butte board with a white ruler scale (2-18 inches) above a small white platform. Read the snow height on the platform against the scale.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "eldora",
+   "name": "Eldora",
+   "region": "Colorado",
+   "lat": 39.938,
+   "lon": -105.584,
+   "zone": "co_front",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Eldora",
+    "note": "Illuminated orange tree-shaped marker inside a clear sphere; rungs labeled 1-14 in inches. Read highest visible rung label."
+   }
+  },
+  {
+   "prefix": "keystone_snowstake",
+   "name": "Keystone",
+   "region": "Colorado",
+   "lat": 39.605,
+   "lon": -105.954,
+   "zone": "co_i70",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Keystone",
+    "note": "Green 1-18 inch ruler. Read snow piled at the base of the ruler."
+   }
+  },
+  {
+   "prefix": "loveland",
+   "name": "Loveland",
+   "region": "Colorado",
+   "lat": 39.68,
+   "lon": -105.898,
+   "zone": "co_i70",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Loveland",
+    "note": "Decorative sign with blue/yellow 2-20 ruler. Read snow piled at the base of the sign.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "monarch",
+   "name": "Monarch",
+   "region": "Colorado",
+   "lat": 38.512,
+   "lon": -106.332,
+   "zone": "co_gunnison",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Monarch Mountain",
+    "note": "Blue platform with vertical pole stake. Ruler marks ascending; read snow line at base of pole."
+   }
+  },
+  {
+   "prefix": "purgatory_snowstake",
+   "name": "Purgatory",
+   "region": "Colorado",
+   "lat": 37.63,
+   "lon": -107.814,
+   "zone": "co_sanjuans",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Purgatory",
+    "note": "Black measuring board marked 2-22 inches under a 'Purgatory 60th Anniversary' sign, on a white base plate; cleared at 4pm. Read the snow height at the board base.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "skicooper_stake",
+   "name": "Ski Cooper",
+   "region": "Colorado",
+   "lat": 39.361,
+   "lon": -106.301,
+   "zone": "co_gunnison",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Ski Cooper",
+    "note": "Thin red stake marked in inches standing on a wooden cable-spool table; cleared about 5am. Read the snow height on the table at the stake.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "wolfcreek_summit",
+   "name": "Wolf Creek",
+   "region": "Colorado",
+   "lat": 37.472,
+   "lon": -106.793,
+   "zone": "co_sanjuans"
+  },
+  {
+   "prefix": "taos_poco",
+   "name": "Taos",
+   "region": "Colorado",
+   "lat": 36.596,
+   "lon": -105.454,
+   "zone": "nm_north",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Taos Ski Valley",
+    "note": "Black stake with white circles numbered 1-22 inches, mounted on a white snow board. Read the snow height at the stake base on the board. Image updates hourly.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "powderhorn",
+   "name": "Powderhorn",
+   "region": "Colorado",
+   "lat": 39.069,
+   "lon": -108.15,
+   "zone": "co_mesa",
+   "model": {
+    "stake_type": "sherpa_bar",
+    "label": "Powderhorn Mountain Resort",
+    "note": "Crescent-moon-shaped wooden sign with staggered numbers 2/4/6/8/10/12/14/16 on a flat dark surface. Read highest hidden number when snow piles on the platform.",
+    "adapter": "outputs/run_20261010_193642"
+   }
+  },
+  {
+   "prefix": "steamboat_snowstake",
+   "name": "Steamboat",
+   "region": "Colorado",
+   "lat": 40.457,
+   "lon": -106.804,
+   "zone": "co_park",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Steamboat (Champagne Powder Cam)",
+    "note": "TWO vertical poles each marked 2-28. Left pole labeled 'SINCE 4:00 PM' (resets daily), right pole labeled 'RECENT STORM TOTAL'. Read snow at base of each pole."
+   }
+  },
+  {
+   "prefix": "sunlight_snapshot",
+   "name": "Sunlight",
+   "region": "Colorado",
+   "lat": 39.399,
+   "lon": -107.338,
+   "zone": "co_elks",
+   "model": {
+    "stake_type": "sherpa_bar",
+    "label": "Sunlight Mountain",
+    "note": "Semicircular blue/orange sunburst signboard with central tree-shaped wooden stake. Horizontal rungs labeled every 2 inches (staggered: left ladder has 4/8/12/16/20, right has 6/10/14/18). 'STORM' total on left platform shelf, '24 HOUR' on right. Read like sherpa_bar — highest rung whose label is hidden by snow pile. Valid: 0/4/6/8/10/12/14/16/18/20.",
+    "adapter": "outputs/run_20261010_193642"
+   }
+  },
+  {
+   "prefix": "telluride_powcam",
+   "name": "Telluride",
+   "region": "Colorado",
+   "lat": 37.937,
+   "lon": -107.812,
+   "zone": "co_sanjuans"
+  },
+  {
+   "prefix": "vail_snowsummit",
+   "name": "Vail",
+   "region": "Colorado",
+   "lat": 39.606,
+   "lon": -106.355,
+   "zone": "co_i70",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Vail",
+    "note": "Blue 'VAIL' board with a ruler (1-20 inches) in front of a wooden fence; a separate clock/thermometer board stands to its left. Read the snow height at the base of the blue ruler board.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "winter_park",
+   "name": "Winter Park",
+   "region": "Colorado",
+   "lat": 39.886,
+   "lon": -105.763,
+   "zone": "co_front",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Winter Park",
+    "note": "Vertical sign topped with 'Winter Park' header, red ruler 2-18 inches running down the middle. Read snow piled at the base of the sign."
+   }
+  },
+  {
+   "prefix": "alta_snowstake",
+   "name": "Alta",
+   "region": "Utah",
+   "lat": 40.588,
+   "lon": -111.638,
+   "zone": "ut_cottonwoods",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Alta",
+    "note": "Snowflake-shaped sign with 2-22 inch ruler down the middle. Read snow piled at the base of the ruler. Filenames are UTC, so many frames are night."
+   }
+  },
+  {
+   "prefix": "snowbird_snowstake",
+   "name": "Snowbird",
+   "region": "Utah",
+   "lat": 40.581,
+   "lon": -111.657,
+   "zone": "ut_cottonwoods",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Snowbird",
+    "note": "Vertical metal pole with tick marks at 2/6/10/14/18/22/26 inches, blue+green Snowbird chevron sign behind. Snow piles on a cleared platform at the base — read the snow line where the mound meets the pole, NOT the chevron panels.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "park_city",
+   "name": "Park City",
+   "region": "Utah",
+   "lat": 40.651,
+   "lon": -111.508,
+   "zone": "ut_wasatch_back",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Park City",
+    "note": "White wooden platform with a tall vertical 1-23 inch ruler mounted on it. Platform is heavily cleared by staff so the base typically reads 0 even after storms; read the snow line on the ruler where snow piled on the platform meets it."
+   }
+  },
+  {
+   "prefix": "sundance",
+   "name": "Sundance",
+   "region": "Utah",
+   "lat": 40.393,
+   "lon": -111.588,
+   "zone": "ut_wasatch_back",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Sundance",
+    "note": "Wooden sign with goggles motif and TWO vertical rulers (2-24) one left, one right. Left = 'OVERNIGHT' total, right = '24 HOURS' total. Read snow line at base of each ruler.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "brian_head",
+   "name": "Brian Head",
+   "region": "Utah",
+   "lat": 37.702,
+   "lon": -112.85,
+   "zone": "ut_south",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Brian Head",
+    "note": "Teal arch-shaped sign with painted mountains and a vertical 2-24 ruler down the middle. Read the snow line on the ruler at the base of the arch."
+   }
+  },
+  {
+   "prefix": "cherry_peak",
+   "name": "Cherry Peak",
+   "region": "Utah",
+   "zone": null
+  },
+  {
+   "prefix": "powder_mountain",
+   "name": "Powder Mountain",
+   "region": "Utah",
+   "lat": 41.38,
+   "lon": -111.78,
+   "zone": "ut_ogden",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Powder Mountain",
+    "note": "Stacked-pucks pole at Hidden Lake Survey Site with marks 2-30 on both sides. Read snow line where mound meets the pole.",
+    "adapter": "outputs/run_20261010_193642"
+   }
+  },
+  {
+   "prefix": "deer_valley",
+   "name": "Deer Valley",
+   "region": "Utah",
+   "lat": 40.637,
+   "lon": -111.478,
+   "zone": "ut_wasatch_back",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Deer Valley",
+    "note": "Wooden board with brass deer emblem and ruler marks at 3/6/9/12/15/18/21 (every 3 inches). Read snow piled at the base of the board."
+   }
+  },
+  {
+   "prefix": "snowbasin",
+   "name": "Snowbasin",
+   "region": "Utah",
+   "lat": 41.216,
+   "lon": -111.857,
+   "zone": "ut_ogden",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Snowbasin",
+    "note": "'24 Hour Total' board: a vertical ruler marked 2-24 inches rising from a flat platform beside a carved sun sign. Read the snow height at the base of the ruler on the platform.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "bigsky_andesite",
+   "name": "Big Sky",
+   "region": "Montana / Wyoming / Idaho",
+   "lat": 45.284,
+   "lon": -111.401,
+   "zone": "mt_sw",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Big Sky (Andesite)",
+    "note": "Black triangular Big Sky sign with a clock and TWO vertical rulers (2-28 inches). Read ONLY the LEFT ruler labeled '24 HOUR TOTAL' at its base; ignore the right 'STORM TOTAL' ruler.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "bigsky_headwaters",
+   "name": "Big Sky Headwaters",
+   "region": "Montana / Wyoming / Idaho",
+   "lat": 45.284,
+   "lon": -111.401,
+   "zone": null,
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Big Sky (Headwaters)",
+    "note": "Black triangular Big Sky sign with a clock and TWO vertical rulers (2-28 inches). Read ONLY the LEFT ruler labeled '24 HOUR TOTAL' at its base; ignore the right 'STORM TOTAL' ruler.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "bridgerbowl_redchair",
+   "name": "Bridger Bowl",
+   "region": "Montana / Wyoming / Idaho",
+   "lat": 45.817,
+   "lon": -110.897,
+   "zone": "mt_sw",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Bridger Bowl",
+    "note": "Red chairlift seat with a vertical ruler (2-20 inches) rising from the seat. Read the snow depth accumulated on the seat against the ruler.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "discovery_snowstake",
+   "name": "Discovery",
+   "region": "Montana / Wyoming / Idaho",
+   "lat": 46.249,
+   "lon": -113.239,
+   "zone": "mt_nw",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Discovery Ski Area",
+    "note": "Small brown vertical stake on wooden deck near a round thermometer. Ruler shows ~1-24 marks. Read snow line on the stake.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "grandtarghee",
+   "name": "Grand Targhee",
+   "region": "Montana / Wyoming / Idaho",
+   "lat": 43.79,
+   "lon": -110.958,
+   "zone": "wy_tetons",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Grand Targhee",
+    "note": "Vertical clear tube 'Stick of Truth' with inch marks visible (~1-20+). Decorative figurines around base. Read the snow line where the mound meets the tube."
+   }
+  },
+  {
+   "prefix": "whitefish",
+   "name": "Whitefish",
+   "region": "Montana / Wyoming / Idaho",
+   "lat": 48.481,
+   "lon": -114.357,
+   "zone": "mt_nw",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Whitefish",
+    "note": "Painted mountain scene with vertical 1-12 ruler 'SUMMIT SNOW CAM - Cleared Daily at 4PM'. Reads 24-hour snowfall (resets at 4PM daily, not total depth)."
+   }
+  },
+  {
+   "prefix": "boreal",
+   "name": "Boreal",
+   "region": "California / Nevada",
+   "lat": 39.336,
+   "lon": -120.35,
+   "zone": "ca_tahoe",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Boreal",
+    "note": "Yellow ruler with black diamond markings (2, 6, 10, ... inches) mounted on a flat white platform. Read the snow height at the ruler base on the platform.",
+    "adapter": "outputs/run_20261012_101416"
+   }
+  },
+  {
+   "prefix": "kirkwood",
+   "name": "Kirkwood",
+   "region": "California / Nevada",
+   "lat": 38.685,
+   "lon": -120.065,
+   "zone": "ca_tahoe"
+  },
+  {
+   "prefix": "northstar",
+   "name": "Northstar",
+   "region": "California / Nevada",
+   "lat": 39.274,
+   "lon": -120.121,
+   "zone": "ca_tahoe",
+   "model": {
+    "stake_type": "depth_stake",
+    "label": "Northstar California",
+    "note": "Maroon Northstar-branded board with TWO vertical rulers 1-25 (one left, one right). Left = 24-hour total, right = storm total. Read snow piled at base of each ruler."
+   }
+  }
+ ]
+}
