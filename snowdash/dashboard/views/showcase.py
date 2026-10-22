@@ -12,7 +12,7 @@ from .common import _read_json
 from .snowcams import _load_predictions_history
 from .snowcams import _history_cache
 from .snowcams import _cam_names
-from .forecast import _resort_forecast
+from .forecast import _forecast_strip, _resort_forecast
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +168,7 @@ def home(request):
         "cam_count": len(stakes),
         "storm_count": len(highlights),
         "generated_at": catalog.get("generated_at"),
+        "forecast_strip": _forecast_strip(),
     })
 
 
