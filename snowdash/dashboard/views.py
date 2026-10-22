@@ -705,32 +705,22 @@ _history_cache = {"path": None, "mtime": None, "rows": None}
 
 
 def _load_predictions_history():
-    """Load + cache cam_predictions_history.json.
+    """All per-image readings (model + label), newest first, from the cam_prediction table.
 
-    File is a flat list of records: {prefix, ts, name, depth_inches, confidence, source}.
-    Cache invalidated when the file's mtime changes.
+    Records are {prefix, ts, name, depth_inches, confidence, source, ...} (written by
+    bin/history_db.py). Cached per worker until the table changes.
     """
-    import json as _json
-    candidates = [
-        Path("/snowcam-predictions/cam_predictions_history.json"),
-        Path("/home/trent/snowhackers/cam_predictions_history.json"),
-        Path(settings.BASE_DIR).parent / "cam_predictions_history.json",
-    ]
-    for path in candidates:
-        if not path.exists():
-            continue
-        mtime = path.stat().st_mtime
-        if _history_cache["path"] == str(path) and _history_cache["mtime"] == mtime:
-            return _history_cache["rows"], str(path)
-        try:
-            rows = _json.loads(path.read_text())
-        except Exception:
-            return [], str(path)
-        if not isinstance(rows, list):
-            rows = []
-        _history_cache.update({"path": str(path), "mtime": mtime, "rows": rows})
-        return rows, str(path)
-    return [], None
+    with connection.cursor() as cur:
+        cur.execute("SELECT count(*), max(updated_at) FROM cam_prediction")
+        key = cur.fetchone()
+        if _history_cache["mtime"] != key:
+            # One unsorted text blob + json.loads + a Python sort: ~0.4 s cold. Per-row json casts or
+            # ORDER BY inside json_agg take 1.5-2 s (Postgres sorts the wide rows).
+            cur.execute("SELECT coalesce(json_agg(rec), '[]')::text FROM cam_prediction")
+            rows = __import__("json").loads(cur.fetchone()[0])
+            rows.sort(key=lambda r: (r.get("ts") or "", r.get("name") or ""), reverse=True)
+            _history_cache.update({"path": "postgres:cam_prediction", "mtime": key, "rows": rows})
+    return _history_cache["rows"], _history_cache["path"]
 
 
 def snowcam_search(request):
@@ -1102,16 +1092,13 @@ _DAYLIGHT_CACHE = {"mtime": None, "frames": {}}
 def _latest_daylight_frames():
     """{prefix: [(captured_at_utc_text, image_name), ...]} newest daylight (9am-4pm local) frames first."""
     from zoneinfo import ZoneInfo
-    path = Path("/snowcam-predictions/cam_predictions_history.json")
-    try:
-        mtime = path.stat().st_mtime
-    except OSError:
-        return {}
+    rows, _ = _load_predictions_history()
+    mtime = _history_cache["mtime"]
     if _DAYLIGHT_CACHE["mtime"] == mtime:
         return _DAYLIGHT_CACHE["frames"]
     local = ZoneInfo("America/Denver")
     best = {}
-    for r in _read_json(path, []):
+    for r in rows:
         ts, name, prefix = r.get("ts"), r.get("name"), r.get("prefix")
         if not (ts and name and prefix) or r.get("source") != "model":
             continue

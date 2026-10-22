@@ -107,18 +107,17 @@ log "Pulling predictions to $LOCAL_OUT"
 # (rsync default) leaves the container reading the old copy until it restarts.
 rsync -a --inplace "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions.json" "$LOCAL_OUT"
 
-# 5. Append today's predictions to the per-image history file so the search
-#    UI gets fresh rows even without running the full backfill.
-LOCAL_HISTORY="$HERE/cam_predictions_history.json"
-if [ -f "$LOCAL_HISTORY" ]; then
-  log "Appending latest predictions to $LOCAL_HISTORY"
-  python3 - "$LOCAL_OUT" "$LOCAL_HISTORY" <<'PY'
+# 5. Add this hour's predictions to the per-image history so the search
+#    UI and highlights get fresh rows (bin/history_db.py, table cam_prediction).
+log "Adding latest predictions to the cam_prediction table"
+python3 - "$LOCAL_OUT" "$HERE/bin" <<'PY'
 import json, sys, re
 from pathlib import Path
 
-latest_path, history_path = Path(sys.argv[1]), Path(sys.argv[2])
+latest_path = Path(sys.argv[1])
+sys.path.insert(0, sys.argv[2])
+import history_db
 latest = json.loads(latest_path.read_text())
-history = json.loads(history_path.read_text())
 
 # {prefix}_{YYYYMMDD}_{HHMMSS}[_MS].jpg
 FN = re.compile(r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})(?:_\d+)?\.jpg$")
@@ -129,8 +128,7 @@ def ts_from(name):
     d, t = m.group("date"), m.group("time")
     return f"{d[:4]}-{d[4:6]}-{d[6:8]} {t[:2]}:{t[2:4]}:{t[4:]}"
 
-by_key = {(r.get("prefix"), r.get("name")): r for r in history}
-appended = 0
+rows = []
 for r in latest:
     if "image" not in r or "parsed" not in r:
         continue
@@ -139,10 +137,6 @@ for r in latest:
         continue
     prefix = r.get("prefix")
     name = r.get("image")
-    key = (prefix, name)
-    old = by_key.get(key)
-    if old and old.get("source") == "label":
-        continue  # never overwrite labels
     stake_type = r.get("stake_type") or "depth_stake"
     if stake_type == "sherpa_bar":
         depth = parsed.get("snowfall_24h_inches")
@@ -163,14 +157,11 @@ for r in latest:
     if stake_type == "sherpa_bar":
         row["snowfall_24h_inches"] = parsed.get("snowfall_24h_inches")
         row["snowfall_storm_inches"] = parsed.get("snowfall_storm_inches")
-    by_key[key] = row
-    appended += 1
+    rows.append(row)
 
-merged = sorted(by_key.values(), key=lambda r: r.get("ts") or "", reverse=True)
-history_path.write_text(json.dumps(merged, indent=2) + "\n")
-print(f"  Appended {appended} new rows; history now {len(merged)} total")
+n = history_db.upsert(rows)  # never overwrites label rows
+print(f"  Wrote {n} of {len(rows)} rows (label rows are kept)")
 PY
-fi
 
 rm -f "$TMPLIST"
 log "Done. $(jq 'length' "$LOCAL_OUT" 2>/dev/null || echo "?") predictions written."

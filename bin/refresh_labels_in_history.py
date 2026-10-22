@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh the label rows in cam_predictions_history.json from labels.json.
+"""Refresh the label rows in the cam_prediction table (bin/history_db.py) from labels.json.
 
 Use this after any labels.json correction sprint, or after the long backfill
 completes (it caches an old snapshot of label rows at startup, so corrections
@@ -14,7 +14,8 @@ import sys
 from pathlib import Path
 
 LABELS_PATH  = Path("/home/trent/snowcammeasurement/labels/labels.json")
-HISTORY_PATH = Path("/home/trent/snowhackers/cam_predictions_history.json")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import history_db  # noqa: E402
 
 FILENAME_RE = re.compile(r"^(?P<prefix>.+?)_(?P<date>\d{8})_(?P<time>\d{6})(?:_\d+)?\.jpg$")
 
@@ -48,7 +49,7 @@ def label_row(row):
 
 def main():
     labels = json.loads(LABELS_PATH.read_text())
-    history = json.loads(HISTORY_PATH.read_text())
+    history = history_db.load()
 
     # Build a lookup: filename → model_* fields, so we can attach the model's
     # prior prediction onto each label row for side-by-side display.
@@ -97,7 +98,7 @@ def main():
     merged = fresh_labels + kept_model
     merged.sort(key=lambda r: r.get("ts") or "", reverse=True)
 
-    HISTORY_PATH.write_text(json.dumps(merged, indent=2) + "\n")
+    history_db.replace(merged)
     n_with_model = sum(1 for r in fresh_labels if r.get("model_depth_inches") is not None)
     print(f"Wrote {len(merged)} rows: {len(fresh_labels)} labels "
           f"({n_with_model} with prior model reading) + {len(kept_model)} model")

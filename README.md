@@ -126,11 +126,21 @@ check` reports if they're stale. The site reads `cams.json` through a bind mount
 To add a cam: add the capture line in `~/snowcamtimelapse/run_all_once.sh`, an entry in
 `cams.json`, then `camreg.py export`.
 
+### Reading history (`cam_prediction` table, moved from JSON 2026-10-21)
+
+Every per-image reading — hourly model predictions, backfills, and hand/AI labels from
+`~/snowcammeasurement/labels/labels.json` — is one row in Postgres table `cam_prediction`
+(unique on prefix + image name; `rec` holds the full record as JSON). A label row is never
+replaced by a model row. Use `bin/history_db.py` (`export FILE`, `upsert FILE`, `replace FILE`,
+`stats`); the hourly refresh upserts, `bin/refresh_labels_in_history.py` re-syncs label rows
+after a labeling sprint, and the search/accuracy pages, resort pages and `build_highlights.py`
+read the table. The last JSON copy is `~/snowwork/cam_predictions_history.final-20261021.json`.
+
 ### Gotchas
 
-- `cam_predictions.json` and `cam_predictions_history.json` are bind-mounted into snowdash as
-  single files: anything that replaces them by rename leaves the site frozen until restart.
-  Write them in place (`rsync --inplace`) — the refresh and both backfill scripts do.
+- `cam_predictions.json` (latest reading per cam) is bind-mounted into snowdash as a single
+  file: anything that replaces it by rename leaves the site frozen until restart. Write it in
+  place (`rsync --inplace`) — the refresh script does. `cams.json` is mounted the same way.
 - `SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"` is required: OpenStreetMap
   tiles are blocked without a Referer (map broke 2026-10).
 - Model accuracy by cam (2026-10-10 audit vs SNOTEL): Sherpa-bar cams (Snowmass, Aspen,

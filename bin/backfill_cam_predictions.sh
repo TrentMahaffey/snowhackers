@@ -3,8 +3,8 @@
 #
 # Samples 4 frames/day per configured resort (00:00, 06:00, 12:00, 18:00 ±15 min),
 # rsyncs them to the Blackwell, runs Run 7 inference, and merges results into
-# cam_predictions_history.json. Idempotent — skips images that already have rows
-# in the history file (unless --rerun is passed).
+# the cam_prediction table. Idempotent — skips images that already have rows
+# in it (unless --rerun is passed).
 #
 # Typical run: ~10K images, ~3 sec each on Blackwell → ~8 hours of GPU.
 # Run in screen/tmux/run_in_background; it checkpoints every 50 predictions.
@@ -23,7 +23,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 LOCAL_IMG_DIR="/home/trent/snowcamtimelapse/out"
 LOCAL_FT_DIR="/home/trent/snowcammeasurement/finetune"
 LOCAL_CONFIG="$HERE/cam_config.json"
-LOCAL_HISTORY="$HERE/cam_predictions_history.json"
+LOCAL_HISTORY="$(mktemp --suffix=.json)"  # export of the cam_prediction table (bin/history_db.py)
 ADAPTER="outputs/run_20260518_145633"
 
 # Hours to sample per day; pick frames within ±MINUTES of these
@@ -114,11 +114,9 @@ rsync -a "$MANIFEST"                        "$BW_USER@$BW_HOST:$REMOTE_DIR/backf
 
 # Seed remote history with existing local rows so labels and prior backfill
 # work are preserved when --rerun isn't passed.
-if [ -f "$LOCAL_HISTORY" ]; then
-  log "Seeding remote with current cam_predictions_history.json"
-  rsync -a "$LOCAL_HISTORY" \
-    "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions_history.json"
-fi
+log "Seeding remote with the current cam_prediction table"
+python3 "$HERE/bin/history_db.py" export "$LOCAL_HISTORY"
+rsync -a "$LOCAL_HISTORY" "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions_history.json"
 
 # 4. Run backfill on remote
 log "Running predict_history.py on Blackwell (this is the long step)"
@@ -140,25 +138,11 @@ python3 predict_history.py \\
   $EXTRA_ARGS
 EOSSH
 
-# 5. Pull merged history back
-log "Pulling cam_predictions_history.json to $LOCAL_HISTORY"
-# The hourly refresh may have appended rows locally while this ran; keep them.
-cp "$LOCAL_HISTORY" "$LOCAL_HISTORY.pre-pull"
-# --inplace: snowdash bind-mounts this single file; a rename-replace freezes the site.
-rsync -a --inplace "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions_history.json" "$LOCAL_HISTORY"
-python3 - "$LOCAL_HISTORY" "$LOCAL_HISTORY.pre-pull" <<'PY'
-import json, sys
-cur_path, pre_path = sys.argv[1], sys.argv[2]
-cur, pre = json.load(open(cur_path)), json.load(open(pre_path))
-have = {(r.get("prefix"), r.get("name")) for r in cur}
-missing = [r for r in pre if (r.get("prefix"), r.get("name")) not in have]
-if missing:
-    merged = sorted(cur + missing, key=lambda r: r.get("ts") or "", reverse=True)
-    with open(cur_path, "w") as f:  # in place: bind-mounted file
-        f.write(json.dumps(merged, indent=2) + "\n")
-print(f"  kept {len(missing)} rows appended locally during the backfill")
-PY
-rm -f "$LOCAL_HISTORY.pre-pull"
+# 5. Pull the merged result back and upsert it (rows the hourly refresh added meanwhile stay;
+#    label rows are never replaced by model rows).
+log "Pulling results and upserting into cam_prediction"
+rsync -a "$BW_USER@$BW_HOST:$REMOTE_DIR/cam_predictions_history.json" "$LOCAL_HISTORY"
+python3 "$HERE/bin/history_db.py" upsert "$LOCAL_HISTORY"
 
 # 6. Re-merge labels from labels.json. predict_history.py loads its 'existing'
 #    file once at startup, so label corrections made DURING the run don't take
@@ -169,7 +153,5 @@ python3 "$HERE/bin/refresh_labels_in_history.py"
 
 rm -f "$MANIFEST" "$RSYNC_LIST"
 
-TOTAL=$(jq 'length' "$LOCAL_HISTORY")
-LABELED=$(jq '[.[] | select(.source == "label")] | length' "$LOCAL_HISTORY")
-MODELED=$(jq '[.[] | select(.source == "model")] | length' "$LOCAL_HISTORY")
-log "Done. History: $TOTAL total ($LABELED labeled + $MODELED model)"
+rm -f "$LOCAL_HISTORY"
+log "Done. cam_prediction by source: $(python3 "$HERE/bin/history_db.py" stats | tr '\n' ' ')"

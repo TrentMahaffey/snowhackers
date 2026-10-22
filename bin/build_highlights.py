@@ -2,7 +2,7 @@
 """Find storms in the snow-stake model readings and render highlight timelapses.
 
 Runs nightly on the host (after the 7am timelapse jobs):
-  1. Score each resort-day's NEW snow from the model readings in cam_predictions_history.json
+  1. Score each resort-day's NEW snow from the model readings in the cam_prediction table
      (see score_days). A reading must persist ~3 hours to count, so single-frame false
      positives (e.g. Copper's 10" on 2026-10-02) score 0.
   2. Merge consecutive snowy days into storm events; rank by storm total.
@@ -28,12 +28,12 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import camreg  # noqa: E402
+import history_db  # noqa: E402
 
 LOCAL = ZoneInfo("America/Denver")
 SNOWHACKERS = Path("/home/trent/snowhackers")
 CAMS = Path("/home/trent/snowcamtimelapse")
 OUT = CAMS / "out"                                   # /out inside the snowcams container
-HISTORY = SNOWHACKERS / "cam_predictions_history.json"
 CAM_CONFIG = SNOWHACKERS / "cam_config.json"
 DATA = SNOWHACKERS / "snowdash/dashboard/data"
 CATALOG = DATA / "highlights.json"
@@ -336,7 +336,7 @@ def main():
     overrides = json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else {}
     old = {h["id"]: h for h in json.loads(CATALOG.read_text())["highlights"]} if CATALOG.exists() else {}
 
-    scored = score_days(json.loads(HISTORY.read_text()))
+    scored = score_days(history_db.load())
     storms = find_storms(scored)
     near, obs = snotel_confirm(storms)
     # Daily new snow at the nearest SNOTEL station (positive day-over-day depth change), the
