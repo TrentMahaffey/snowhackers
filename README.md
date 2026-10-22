@@ -68,6 +68,8 @@ for local curl) in front of `snowapi-snowdash` (Django). Sibling repos: `~/snowc
 
 ### Site pages
 
+Code: `snowdash/dashboard/views/` — `weather.py` (SNOTEL tables, map, station APIs), `snowcams.py` (timelapses, image search, accuracy), `showcase.py` (home, resort pages, curation), `forecast.py`, `common.py`. Host scripts share `bin/snowlib.py` (psql_csv, km), `bin/camreg.py` (cam registry) and `bin/history_db.py` (reading history).
+
 | URL | What |
 |---|---|
 | `/` | Storm showcase: hero clip, biggest-storms gallery, live stakes (`views.home`) |
