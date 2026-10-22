@@ -81,12 +81,13 @@ for local curl) in front of `snowapi-snowdash` (Django). Sibling repos: `~/snowc
 
 | When | Job |
 |---|---|
-| 02:07 | `bin/update_snow.sh` — SNOTEL obs + GFS/ICON/ECMWF forecasts |
+| 02:07 | `bin/update_snow.sh` — SNOTEL obs + GFS/ICON/ECMWF forecasts, then `bin/forecast_retention.sql` (runs >48 h old keep only lead −24..+72 h) |
 | :13 hourly | `bin/refresh_cam_predictions.sh` — runs the fine-tuned Qwen2.5-VL model on the Blackwell (192.168.0.117) over the latest frame per model cam in `cams.json` (via the generated `cam_config.json`); routes each cam to its adapter (generated `cam_routing.json`) (run 7 default, run 9 Sherpa, run 10 newer cams); skips the hour while `training.lock` exists on the Blackwell |
 | 06/08/12/16:40 | `bin/update_resort_reports.sh` — resort-published snow reports → table `resort_snow_reports` |
 | 04:15 | `bin/build_forecast.py` — zone forecasts → `snowdash/dashboard/data/forecast.json` (+ `forecast_archive/`) |
 | Mon 05:30 | `bin/score_forecasts.py` — model skill vs SNOTEL per zone → `data/forecast_skill.json` |
 | 08:30 | `bin/build_highlights.py` — storm detection, highlight clips, chart data |
+| Sun 05:00 | `bin/rotate_logs.sh` — logrotate (`logrotate.conf`: cron logs weekly, keep 4, gzip) + delete per-run update/backfill logs >60 days |
 
 ### Storm highlights (`bin/build_highlights.py`)
 
