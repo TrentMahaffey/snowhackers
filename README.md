@@ -24,12 +24,9 @@ SNOTEL + Open-Meteo snow data fetcher with interactive dashboard.
    - Adjust other settings as needed
 
 3. **Optional - Snow Cam Integration:**
-   If you have snow cam timelapse videos, update `docker-compose.yml` lines 107-108:
-   ```yaml
-   - /path/to/your/timelapses:/snowcam-timelapses:ro
-   - /path/to/your/snapshots:/snowcam-snapshots:ro
-   ```
-   Otherwise, comment out or remove these volume mounts.
+   Point the `snowdash` volume mounts in `docker-compose.yml` at your capture output
+   (`SNOWCAM_TIMELAPSE_DIR`, `SNOWCAM_TIMELAPSE7_DIR`, `SNOWCAM_TIMELAPSE30_DIR`, `SNOWCAM_OUT_DIR`
+   in `.env`); the cam list lives in `cams.json`.
 
 4. **Start the services:**
    ```bash
@@ -37,22 +34,22 @@ SNOTEL + Open-Meteo snow data fetcher with interactive dashboard.
    ```
 
 5. **Access the dashboard:**
-   - Map: http://localhost:9003/
-   - Dashboard: http://localhost:9003/tables/
-   - Snow Cams: http://localhost:9003/snowcams/ (if configured)
+   - Storm showcase: http://localhost:9003/
+   - SNOTEL map: http://localhost:9003/map/
+   - Tables: http://localhost:9003/tables/
+   - Snow cams / forecast: http://localhost:9003/snowcams/, http://localhost:9003/forecast/
 
 6. **Load initial data:**
    ```bash
-   # Fetch SNOTEL stations
-   docker compose run --rm runner python -m snowapi stations
+   # Stations, 14 days of SNOTEL obs, and GFS/ICON/ECMWF forecasts for every station
+   docker compose run --rm runner python /app/main.py update-all --days-back 14
+   docker compose run --rm runner python /app/main.py init-views
 
-   # Run initial forecast
-   docker compose run --rm runner python -m snowapi forecast-once --days-ahead 14
-
-   # Initialize materialized views
+   # Indexes and materialized views
    docker compose exec -T db psql -U snowuser -d snow < db/migrations/001_add_composite_indexes.sql
    docker compose exec -T db psql -U snowuser -d snow < db/migrations/002_create_materialized_views.sql
    docker compose exec -T db psql -U snowuser -d snow < db/migrations/003_create_observed_vs_forecast_mv.sql
+   docker compose exec -T db psql -U snowuser -d snow < db/migrations/004_create_obs_vs_fc_48_72.sql
    ```
 
 ## Development Setup
@@ -60,7 +57,9 @@ SNOTEL + Open-Meteo snow data fetcher with interactive dashboard.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
-## Operations (production on 192.168.0.110, updated 2026-10-10)
+```
+
+## Operations (production on 192.168.0.110, updated 2026-10-31)
 
 snowhackers.com is served by `snowapi-nginx` (:9003, Host header `snowhackers.com` required
 for local curl) in front of `snowapi-snowdash` (Django). Sibling repos: `~/snowcamtimelapse`
@@ -89,7 +88,12 @@ Code: `snowdash/dashboard/views/` — `weather.py` (SNOTEL tables, map, station 
 | 04:15 | `bin/build_forecast.py` — zone forecasts → `snowdash/dashboard/data/forecast.json` (+ `forecast_archive/`) |
 | Mon 05:30 | `bin/score_forecasts.py` — model skill vs SNOTEL per zone → `data/forecast_skill.json` |
 | 08:30 | `bin/build_highlights.py` — storm detection, highlight clips, chart data |
+| :05 hourly | `~/snowcammeasurement/scripts/cron_measure.sh` — OpenCV measurements in the `snow-frontend` container (secondary to the model) |
+| 04:20 | `~/snowcamtimelapse/cap_cron_log.sh` — trims the capture container's `out/cron.log` |
+| 10:25 | `~/scripts/daily_all_repos_push.sh` — pushes committed work in every repo (this one: branch `prep-public`) |
 | Sun 05:00 | `bin/rotate_logs.sh` — logrotate (`logrotate.conf`: cron logs weekly, keep 4, gzip) + delete per-run update/backfill logs >60 days |
+
+Capture runs every 5 min inside the `snowcams` container (see `~/snowcamtimelapse/CLAUDE.md`).
 
 ### Storm highlights (`bin/build_highlights.py`)
 
@@ -111,6 +115,10 @@ resorts. Survey of endpoints: `resort_snow_report_sources.json`. View
 `resort_snow_reports_fresh` keeps only reports the resort updated that day. Vail sites
 reject the runner container's TLS fingerprint, so the fetch runs on the host and the runner
 only loads the JSON.
+
+Southern Colorado / New Mexico parsers live in `bin/south_sources.py` (added 2026-10-19). Only Wolf Creek
+and Ski Santa Fe publish a storm total. MCP sites (Purgatory, Sipapu, Pajarito) remove their snow table off-season
+and raise until opening; Ski Cooper posts only an image (disabled); Taos numbers appear to be OpenSnow estimates.
 
 ### Cam registry (`cams.json`, added 2026-10-21)
 
@@ -154,9 +162,14 @@ without it, it re-bakes from `finetune/accuracy_demo_predictions.json`. 2026-10-
   place (`rsync --inplace`) — the refresh script does. `cams.json` is mounted the same way.
 - `SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"` is required: OpenStreetMap
   tiles are blocked without a Referer (map broke 2026-10).
-- Model accuracy by cam (2026-10-10 audit vs SNOTEL): Sherpa-bar cams (Snowmass, Aspen,
+- Model accuracy by cam: the 2026-10-10 SNOTEL audit found Sherpa-bar cams (Snowmass, Aspen,
   Highlands, Buttermilk, Sunlight, Powderhorn) and Sundance, Powder Mountain, Loveland, Alta
-  badly under-read storms. See `~/snowcammeasurement/finetune/TRAINING_LOGS.MD`.
+  badly under-reading storms. Runs 9 (Sherpa bars) and 10 (batch-34 cams) were trained for them
+  and are routed per cam; current numbers are on /snowcams/accuracy/ (MAE 1.2" over 32 resorts,
+  frozen test 1.4"). See `~/snowcammeasurement/finetune/TRAINING_LOGS.MD`.
+- Not in git and not backed up: the Postgres volume (forecast history, `cam_prediction`, resort
+  reports — SNOTEL can be re-fetched, the rest can't), captured frames in
+  `~/snowcamtimelapse/out/`, and `.env` (Alterra token, DB password).
 
 ### Zone forecasts (`bin/build_forecast.py`, added 2026-10-12)
 
@@ -164,7 +177,8 @@ without it, it re-bakes from `finetune/accuracy_demo_predictions.json`. 2026-10-
   nearest SNOTEL stations (≤40 km). For every station the latest run per model is used — run
   timestamps differ per station, so never take a global "latest run".
 - Numbers are deterministic: per-model 24h / 72h / 7-day sums, ensemble mean, model range, and a
-  confidence from model agreement. Only snowfall is stored (no temperature / snow level yet).
+  confidence from model agreement. Snowfall comes from `forecast_hourly`; temperatures and snow
+  level are fetched from Open-Meteo at build time (see Weather below).
 - The discussion is written by local Qwen3 32B (Ollama on the Blackwell, reached over SSH because
   Ollama listens on localhost only). The job waits for ≥22 GB free GPU and no `training.lock`,
   then unloads the model. A verifier rejects any inch figure not in the data (up to 3 attempts,
@@ -178,10 +192,6 @@ without it, it re-bakes from `finetune/accuracy_demo_predictions.json`. 2026-10-
 - Skill (`bin/score_forecasts.py`, weekly): each model's day-ahead forecast vs SNOTEL depth increase per zone,
   backtested over the season (~17k station-days). All models run low on snow days (−0.6 to −1.2″/day;
   Cottonwoods −2.2″). Per-zone scale factors were tested (fit Nov–Feb, test Feb–May) and made forecasts WORSE in
-  13/14 zones, so they are NOT applied — skill is shown as context only. ICON verified best in 13/14 zones.
+  13 of the 14 zones scored then, so they are NOT applied — skill is shown as context only. ICON verified best in 13/14 zones.
 - `/forecast/` has a Leaflet map of resorts colored by 7-day snow (validated ordinal blue ramp).
 - Text post-processing: amounts rounded half-up to whole inches (Python round() is banker's), sub-inch → "a dusting".
-\n
-Southern Colorado / New Mexico report parsers live in `bin/south_sources.py` (added 2026-10-19). Only Wolf Creek
-and Ski Santa Fe publish a storm total. MCP sites (Purgatory, Sipapu, Pajarito) remove their snow table off-season
-and raise until opening; Ski Cooper posts only an image (disabled); Taos numbers appear to be OpenSnow estimates.
