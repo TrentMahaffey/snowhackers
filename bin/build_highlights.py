@@ -69,9 +69,12 @@ def local_date(ts_utc_text):
 def score_days(rows):
     """{prefix: {local_date: (daily_new_snow_in, [(ts, depth, name), ...])}}
 
+    Snow day D runs 6 pm D-1 .. 6 pm D (like a resort 24-hour report), so every reading belongs
+    to exactly one day. Until 2026-11-06 days were calendar days that ALSO looked back to 6 pm,
+    which counted evening snow twice (Breckenridge 2026-11-04/05: 6" + 8" for ~7" of snow).
     New snow on day D = the largest RISE in the stake reading during D: each reading is
-    compared with the lowest reading BEFORE it, looking back to 6pm the previous evening
-    (plus the last reading before that, for sparse overnight gaps). Only rises count, so:
+    compared with the lowest reading BEFORE it in the day (plus the last reading before the
+    day, for sparse overnight gaps). Only rises count, so:
       * melt days score 0 even when the day starts deep (Winter Park 2026-05-02: 10" at
         dawn melting to 0" by noon used to score 10" when the formula was high - low);
       * settled snow sitting for weeks scores 0;
@@ -98,13 +101,16 @@ def score_days(rows):
     for prefix, series in per.items():
         series.sort()
         times = [s[0] for s in series]
+        def snow_day(t):  # 6 pm D-1 .. 6 pm D belongs to day D, so no reading is in two days
+            t = t.astimezone(LOCAL)
+            return t.date() + timedelta(days=1) if t.hour >= 18 else t.date()
         days = defaultdict(list)
         for i, s in enumerate(series):
-            days[s[0].astimezone(LOCAL).date()].append(i)
+            days[snow_day(s[0])].append(i)
         n = len(series)
         smooth = []
         for i, s in enumerate(series):
-            w = 5 if len(days[s[0].astimezone(LOCAL).date()]) >= 12 else 3
+            w = 5 if len(days[snow_day(s[0])]) >= 12 else 3
             h = w // 2
             smooth.append(median(x[1] for x in series[max(0, i - h):min(n, i + h + 1)]))
 
@@ -318,6 +324,16 @@ def main():
     ap.add_argument("--rebuild", nargs="*", default=[], help="force re-render of these highlight ids")
     ap.add_argument("--refresh-posters", action="store_true", help="re-pick poster frames for existing clips (no video render)")
     args = ap.parse_args()
+
+    # One build at a time: two concurrent runs render the same clip into the same staging dir
+    # (2026-11-06 a manual rebuild overlapped the 08:30 cron). The lock is released on exit.
+    import fcntl
+    lock = open("/tmp/build_highlights.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("another build_highlights.py is running; exiting")
+        return
 
     resort_names = {e["prefix"]: e["resort"] for e in json.loads(CAM_CONFIG.read_text())}
     overrides = json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else {}
