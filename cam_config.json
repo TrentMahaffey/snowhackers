@@ -11,28 +11,32 @@
   "prefix": "aspen",
   "stake_type": "sherpa_bar",
   "resort_label": "Aspen Mountain",
-  "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass."
+  "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
+  "sherpa_rubric": "pile"
  },
  {
   "resort": "Aspen Highlands",
   "prefix": "highlands",
   "stake_type": "sherpa_bar",
   "resort_label": "Aspen Highlands",
-  "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass."
+  "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
+  "sherpa_rubric": "pile"
  },
  {
   "resort": "Buttermilk",
   "prefix": "buttermilk",
   "stake_type": "sherpa_bar",
   "resort_label": "Buttermilk",
-  "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass."
+  "resort_note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
+  "sherpa_rubric": "pile"
  },
  {
   "resort": "Snowmass",
   "prefix": "snowmass",
   "stake_type": "sherpa_bar",
   "resort_label": "Snowmass",
-  "resort_note": "Aspen/Snowmass 'Sherpa Bar': a watch flanked by two stepped wooden ladders."
+  "resort_note": "Aspen/Snowmass 'Sherpa Bar': a watch flanked by two stepped wooden ladders.",
+  "sherpa_rubric": "pile"
  },
  {
   "resort": "Beaver Creek",

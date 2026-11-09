@@ -58,9 +58,17 @@ def zones():
 
 def predict_config():
     """cam_config.json contents: model cams as {resort, prefix, stake_type, resort_label, resort_note}."""
-    return [{"resort": c["name"], "prefix": c["prefix"], "stake_type": c["model"]["stake_type"],
-             "resort_label": c["model"]["label"], "resort_note": c["model"]["note"]}
-            for c in cams() if c.get("model")]
+    out = []
+    for c in cams():
+        m = c.get("model")
+        if not m:
+            continue
+        e = {"resort": c["name"], "prefix": c["prefix"], "stake_type": m["stake_type"],
+             "resort_label": m["label"], "resort_note": m["note"]}
+        if m.get("sherpa_rubric"):  # "pile" selects the run-11+ Sherpa prompt
+            e["sherpa_rubric"] = m["sherpa_rubric"]
+        out.append(e)
+    return out
 
 
 def routing():

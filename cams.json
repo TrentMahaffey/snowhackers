@@ -1,7 +1,7 @@
 {
  "_doc": "Single source of truth for snow cams. Edit here, then run: python3 bin/camreg.py export  (regenerates cam_config.json + cam_routing.json for the ML model). See README 'Cam registry'.",
  "default_adapter": "outputs/run_20260518_145633",
- "adapter_notes": "2026-10-12: run 7 best on frozen test (original resorts); run 9 best on Sherpa bars; run 10 best/tied on batch-34 cams it was trained on (except powder_mountain). See TRAINING_LOGS.MD Run 10.",
+ "adapter_notes": "2026-10-12: run 7 best on frozen test (original resorts); run 9 best on Sherpa bars; run 10 best/tied on batch-34 cams it was trained on (except powder_mountain). See TRAINING_LOGS.MD Run 10. 2026-11-09: run 11 (pile-height Sherpa labels) for aspen/highlands/buttermilk/snowmass; Sherpa storm MAE 1.1-1.2 vs run 9 2.2-3.2 (TRAINING_LOGS.MD Run 11).",
  "zones": [
   {
    "id": "co_i70",
@@ -93,7 +93,8 @@
     "stake_type": "sherpa_bar",
     "label": "Aspen Mountain",
     "note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
-    "adapter": "outputs/run_20261010_193642"
+    "adapter": "outputs/run_20261109_091447",
+    "sherpa_rubric": "pile"
    }
   },
   {
@@ -107,7 +108,8 @@
     "stake_type": "sherpa_bar",
     "label": "Aspen Highlands",
     "note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
-    "adapter": "outputs/run_20261010_193642"
+    "adapter": "outputs/run_20261109_091447",
+    "sherpa_rubric": "pile"
    }
   },
   {
@@ -121,7 +123,8 @@
     "stake_type": "sherpa_bar",
     "label": "Buttermilk",
     "note": "Aspen/Snowmass 'Sherpa Bar' design. Same as Snowmass.",
-    "adapter": "outputs/run_20261010_193642"
+    "adapter": "outputs/run_20261109_091447",
+    "sherpa_rubric": "pile"
    }
   },
   {
@@ -135,7 +138,8 @@
     "stake_type": "sherpa_bar",
     "label": "Snowmass",
     "note": "Aspen/Snowmass 'Sherpa Bar': a watch flanked by two stepped wooden ladders.",
-    "adapter": "outputs/run_20261010_193642"
+    "adapter": "outputs/run_20261109_091447",
+    "sherpa_rubric": "pile"
    }
   },
   {
